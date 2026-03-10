@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test script to verify .dockerignore excludes sensitive paths
-# Run: ./scripts/test_dockerignore.sh
+# Run: ./tests/test_dockerignore.sh
 
 set -euo pipefail
 
