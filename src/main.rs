@@ -1696,7 +1696,29 @@ async fn reload_config(host: &str, port: u16) -> Result<()> {
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Config reloaded");
-            println!("{msg}");
+            let restart = body
+                .get("restart_required")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if restart {
+                let warnings = body
+                    .get("restart_warnings")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                println!("✅ Config reloaded from disk.");
+                println!();
+                println!("⚠️  Some changes need a daemon restart:");
+                for w in &warnings {
+                    if let Some(s) = w.as_str() {
+                        println!("  - {s}");
+                    }
+                }
+                println!();
+                println!("Run: sudo systemctl restart zeroclaw");
+            } else {
+                println!("✅ {msg}");
+            }
             Ok(())
         }
         Ok(response) => {

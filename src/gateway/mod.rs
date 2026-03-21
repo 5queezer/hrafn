@@ -2071,18 +2071,50 @@ async fn handle_admin_reload_config(
         ));
     }
 
+    // Detect changes to fields that require a daemon restart.
+    let mut restart_warnings: Vec<String> = Vec::new();
+    {
+        let old = state.config.lock();
+        if old.default_provider != new_config.default_provider {
+            restart_warnings.push(format!(
+                "default_provider changed ({} -> {}) -- restart required",
+                old.default_provider.as_deref().unwrap_or("(none)"),
+                new_config.default_provider.as_deref().unwrap_or("(none)")
+            ));
+        }
+        if old.default_model != new_config.default_model {
+            restart_warnings.push(format!(
+                "default_model changed ({} -> {}) -- restart required",
+                old.default_model.as_deref().unwrap_or("(none)"),
+                new_config.default_model.as_deref().unwrap_or("(none)")
+            ));
+        }
+    }
+
+    for w in &restart_warnings {
+        tracing::warn!(peer = %peer, "{w}");
+    }
+
     *state.config.lock() = new_config;
     tracing::info!(peer = %peer, "Config reloaded from disk successfully");
 
+    let message = if restart_warnings.is_empty() {
+        "Config reloaded from disk -- changes are now active.".to_string()
+    } else {
+        format!(
+            "Config reloaded, but some changes need a daemon restart:\n{}",
+            restart_warnings.join("\n")
+        )
+    };
+
     Ok((
         StatusCode::OK,
-        Json(AdminResponse {
-            success: true,
-            message: "Config reloaded from disk -- changes are now active. \
-                      Note: provider, model, temperature, and pairing changes \
-                      require a daemon restart."
-                .to_string(),
-        }),
+        Json(serde_json::json!({
+            "success": true,
+            "message": message,
+            "restart_required": !restart_warnings.is_empty(),
+            "restart_warnings": restart_warnings,
+        })),
     ))
 }
 
