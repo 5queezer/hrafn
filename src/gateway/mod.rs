@@ -7,6 +7,7 @@
 //! - Request timeouts (30s) to prevent slow-loris attacks
 //! - Header sanitization (handled by axum/hyper)
 
+pub mod a2a;
 pub mod api;
 pub mod api_pairing;
 #[cfg(feature = "plugins-wasm")]
@@ -341,6 +342,10 @@ pub struct AppState {
     pub device_registry: Option<Arc<api_pairing::DeviceRegistry>>,
     /// Pending pairing request store
     pub pending_pairings: Option<Arc<api_pairing::PairingStore>>,
+    /// A2A agent card (pre-generated JSON); `None` when A2A is disabled
+    pub a2a_agent_card: Option<Arc<serde_json::Value>>,
+    /// A2A in-memory task store; `None` when A2A is disabled
+    pub a2a_task_store: Option<Arc<a2a::TaskStore>>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -706,6 +711,16 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         None
     };
 
+    // A2A protocol support
+    let (a2a_agent_card, a2a_task_store) = if config.a2a.enabled {
+        (
+            Some(Arc::new(a2a::generate_agent_card(&config))),
+            Some(Arc::new(a2a::TaskStore::new())),
+        )
+    } else {
+        (None, None)
+    };
+
     let state = AppState {
         config: config_state,
         provider,
@@ -734,6 +749,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         session_backend,
         device_registry,
         pending_pairings,
+        a2a_agent_card,
+        a2a_task_store,
     };
 
     // Config PUT needs larger body limit (1MB)
@@ -747,6 +764,9 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/admin/shutdown", post(handle_admin_shutdown))
         .route("/admin/paircode", get(handle_admin_paircode))
         .route("/admin/paircode/new", post(handle_admin_paircode_new))
+        // ── A2A protocol routes ──
+        .route("/.well-known/agent-card.json", get(a2a::handle_agent_card))
+        .route("/a2a", post(a2a::handle_a2a_rpc))
         // ── Existing routes ──
         .route("/health", get(handle_health))
         .route("/metrics", get(handle_metrics))
@@ -1906,6 +1926,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -1961,6 +1983,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2340,6 +2364,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2409,6 +2435,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let headers = HeaderMap::new();
@@ -2490,6 +2518,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let response = handle_webhook(
@@ -2543,6 +2573,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2601,6 +2633,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2664,6 +2698,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let response = Box::pin(handle_nextcloud_talk_webhook(
@@ -2723,6 +2759,8 @@ mod tests {
             session_backend: None,
             device_registry: None,
             pending_pairings: None,
+            a2a_agent_card: None,
+            a2a_task_store: None,
         };
 
         let mut headers = HeaderMap::new();

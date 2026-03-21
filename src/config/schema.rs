@@ -339,6 +339,10 @@ pub struct Config {
     /// Plugin system configuration (`[plugins]`).
     #[serde(default)]
     pub plugins: PluginsConfig,
+
+    /// A2A (Agent-to-Agent) protocol configuration (`[a2a]`).
+    #[serde(default)]
+    pub a2a: A2aConfig,
 }
 
 /// Multi-client workspace isolation configuration.
@@ -1922,6 +1926,66 @@ impl Default for HttpRequestConfig {
             max_response_size: default_http_max_response_size(),
             timeout_secs: default_http_timeout_secs(),
             allow_private_hosts: false,
+        }
+    }
+}
+
+// ── A2A (Agent-to-Agent) protocol ───────────────────────────────
+
+fn default_a2a_timeout_secs() -> u64 {
+    60
+}
+
+/// A2A (Agent-to-Agent) protocol configuration.
+///
+/// Enables inter-agent communication via the A2A open standard (Linux Foundation).
+/// When enabled, registers both an outbound client tool (`a2a`) and inbound server
+/// endpoints (`GET /.well-known/agent-card.json`, `POST /a2a`).
+///
+/// Compatibility: additive and disabled by default; existing configs remain valid when omitted.
+/// Rollback/migration: remove `[a2a]` or keep `enabled = false` to disable.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct A2aConfig {
+    /// Enable A2A protocol support (client tool + server endpoints). Default: false.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Agent name for the agent card. Falls back to "ZeroClaw Agent".
+    #[serde(default)]
+    pub agent_name: Option<String>,
+    /// Agent description for the agent card.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Agent version string. Default: crate version.
+    #[serde(default)]
+    pub version: Option<String>,
+    /// Externally-reachable base URL for the agent card.
+    /// Default: `http://{gateway.host}:{gateway.port}`.
+    #[serde(default)]
+    pub public_url: Option<String>,
+    /// Bearer token for authenticating inbound A2A requests.
+    /// If empty, falls back to the gateway pairing token.
+    #[serde(default)]
+    pub bearer_token: Option<String>,
+    /// Skills/capabilities to advertise in the agent card.
+    /// If empty, auto-derived from enabled tools.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    /// Request timeout in seconds for outbound A2A calls. Default: 60.
+    #[serde(default = "default_a2a_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+impl Default for A2aConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            agent_name: None,
+            description: None,
+            version: None,
+            public_url: None,
+            bearer_token: None,
+            capabilities: vec![],
+            timeout_secs: default_a2a_timeout_secs(),
         }
     }
 }
@@ -5991,6 +6055,7 @@ impl Default for Config {
             knowledge: KnowledgeConfig::default(),
             linkedin: LinkedInConfig::default(),
             plugins: PluginsConfig::default(),
+            a2a: A2aConfig::default(),
         }
     }
 }
@@ -8427,6 +8492,7 @@ default_temperature = 0.7
             knowledge: KnowledgeConfig::default(),
             linkedin: LinkedInConfig::default(),
             plugins: PluginsConfig::default(),
+            a2a: A2aConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -8760,6 +8826,7 @@ tool_dispatcher = "xml"
             knowledge: KnowledgeConfig::default(),
             linkedin: LinkedInConfig::default(),
             plugins: PluginsConfig::default(),
+            a2a: A2aConfig::default(),
         };
 
         config.save().await.unwrap();

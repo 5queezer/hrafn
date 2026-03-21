@@ -193,6 +193,7 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
         knowledge: crate::config::KnowledgeConfig::default(),
         linkedin: crate::config::LinkedInConfig::default(),
         plugins: crate::config::PluginsConfig::default(),
+        a2a: crate::config::A2aConfig::default(),
     };
 
     println!(
@@ -567,6 +568,7 @@ async fn run_quick_setup_with_home(
         knowledge: crate::config::KnowledgeConfig::default(),
         linkedin: crate::config::LinkedInConfig::default(),
         plugins: crate::config::PluginsConfig::default(),
+        a2a: crate::config::A2aConfig::default(),
     };
 
     config.save().await?;

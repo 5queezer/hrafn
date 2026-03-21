@@ -15,6 +15,7 @@
 //! To add a new tool, implement [`Tool`] in a new submodule and register it in
 //! [`all_tools_with_runtime`]. See `AGENTS.md` §7.3 for the full change playbook.
 
+pub mod a2a;
 pub mod backup_tool;
 pub mod browser;
 pub mod browser_delegate;
@@ -78,6 +79,7 @@ pub mod web_fetch;
 pub mod web_search_tool;
 pub mod workspace_tool;
 
+pub use a2a::A2aTool;
 pub use backup_tool::BackupTool;
 pub use browser::{BrowserTool, ComputerUseConfig};
 #[allow(unused_imports)]
@@ -371,6 +373,14 @@ pub fn all_tools_with_runtime(
             web_fetch_config.blocked_domains.clone(),
             web_fetch_config.max_response_size,
             web_fetch_config.timeout_secs,
+        )));
+    }
+
+    // A2A (Agent-to-Agent) protocol client tool
+    if root_config.a2a.enabled {
+        tool_arcs.push(Arc::new(A2aTool::new(
+            security.clone(),
+            root_config.a2a.timeout_secs,
         )));
     }
 
