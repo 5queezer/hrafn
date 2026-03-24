@@ -14,13 +14,16 @@ use std::sync::Arc;
 pub struct A2aTool {
     security: Arc<SecurityPolicy>,
     timeout_secs: u64,
+    /// When true, allow requests to localhost/private IPs (same-host A2A).
+    allow_local: bool,
 }
 
 impl A2aTool {
-    pub fn new(security: Arc<SecurityPolicy>, timeout_secs: u64) -> Self {
+    pub fn new(security: Arc<SecurityPolicy>, timeout_secs: u64, allow_local: bool) -> Self {
         Self {
             security,
             timeout_secs,
+            allow_local,
         }
     }
 
@@ -56,19 +59,21 @@ impl A2aTool {
     /// the initial connection remains vulnerable to rebinding.  A custom
     /// `reqwest::dns::Resolve` would close this gap at the cost of added
     /// complexity; for now we accept this residual risk.
-    fn validate_url(url: &str) -> anyhow::Result<reqwest::Url> {
+    fn validate_url(&self, url: &str) -> anyhow::Result<reqwest::Url> {
         let parsed = reqwest::Url::parse(url)?;
         match parsed.scheme() {
             "http" | "https" => {}
             scheme => anyhow::bail!("Unsupported URL scheme: {scheme} (only http/https allowed)"),
         }
-        if let Some(host) = parsed.host_str() {
-            if is_private_or_local_host(host) {
-                anyhow::bail!(
-                    "Blocked request to private/local host: {host} (A2A only allows public hosts)"
-                );
+        if !self.allow_local {
+            if let Some(host) = parsed.host_str() {
+                if is_private_or_local_host(host) {
+                    anyhow::bail!(
+                        "Blocked request to private/local host: {host} (A2A only allows public hosts)"
+                    );
+                }
+                validate_resolved_host_is_public(host)?;
             }
-            validate_resolved_host_is_public(host)?;
         }
         Ok(parsed)
     }
@@ -78,7 +83,7 @@ impl A2aTool {
         url: &str,
         bearer_token: Option<&str>,
     ) -> anyhow::Result<ToolResult> {
-        let base = Self::validate_url(url)?;
+        let base = self.validate_url(url)?;
         let card_url = base.join("/.well-known/agent-card.json")?;
         let client = self.build_client()?;
 
@@ -112,7 +117,7 @@ impl A2aTool {
         bearer_token: Option<&str>,
         message: &str,
     ) -> anyhow::Result<ToolResult> {
-        let base = Self::validate_url(url)?;
+        let base = self.validate_url(url)?;
         let rpc_url = base.join("/a2a")?;
         let client = self.build_client()?;
         let request_id = uuid::Uuid::new_v4().to_string();
@@ -160,7 +165,7 @@ impl A2aTool {
         bearer_token: Option<&str>,
         task_id: &str,
     ) -> anyhow::Result<serde_json::Value> {
-        let base = Self::validate_url(url)?;
+        let base = self.validate_url(url)?;
         let rpc_url = base.join("/a2a")?;
         let client = self.build_client()?;
         let request_id = uuid::Uuid::new_v4().to_string();
@@ -477,7 +482,7 @@ mod tests {
 
     fn test_tool() -> A2aTool {
         let security = Arc::new(SecurityPolicy::default());
-        A2aTool::new(security, 30)
+        A2aTool::new(security, 30, false)
     }
 
     #[test]
@@ -582,7 +587,7 @@ mod tests {
     /// Build a tool with a short timeout suitable for mock-server tests.
     fn mock_tool() -> A2aTool {
         let security = Arc::new(SecurityPolicy::default());
-        A2aTool::new(security, 5)
+        A2aTool::new(security, 5, false)
     }
 
     /// Directly call the discover action, bypassing SSRF validation
@@ -817,7 +822,7 @@ mod tests {
             workspace_dir: std::env::temp_dir(),
             ..SecurityPolicy::default()
         });
-        let tool = A2aTool::new(security, 5);
+        let tool = A2aTool::new(security, 5, false);
         let result = tool
             .execute(json!({"action": "discover", "url": "http://example.com"}))
             .await
