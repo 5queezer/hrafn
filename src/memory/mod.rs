@@ -11,6 +11,7 @@ pub mod importance;
 pub mod knowledge_graph;
 pub mod lucid;
 pub mod markdown;
+pub mod muninndb;
 pub mod namespaced;
 pub mod none;
 pub mod policy;
@@ -34,6 +35,7 @@ pub use backend::{
 };
 pub use lucid::LucidMemory;
 pub use markdown::MarkdownMemory;
+pub use muninndb::MuninndbMemory;
 pub use namespaced::NamespacedMemory;
 pub use none::NoneMemory;
 #[allow(unused_imports)]
@@ -67,7 +69,12 @@ where
             let local = sqlite_builder()?;
             Ok(Box::new(LucidMemory::new(workspace_dir, local)))
         }
+<<<<<<< HEAD
         MemoryBackendKind::Qdrant | MemoryBackendKind::Markdown => {
+=======
+        MemoryBackendKind::Postgres => postgres_builder(),
+        MemoryBackendKind::Muninndb | MemoryBackendKind::Qdrant | MemoryBackendKind::Markdown => {
+>>>>>>> c4666f58 (Add MuninnDB as memory backend)
             Ok(Box::new(MarkdownMemory::new(workspace_dir)))
         }
         MemoryBackendKind::None => Ok(Box::new(NoneMemory::new())),
@@ -314,6 +321,71 @@ pub fn create_memory_with_storage_and_routes(
         Ok(mem)
     }
 
+<<<<<<< HEAD
+=======
+    #[cfg(feature = "memory-postgres")]
+    fn build_postgres_memory(
+        storage_provider: Option<&StorageProviderConfig>,
+    ) -> anyhow::Result<Box<dyn Memory>> {
+        let storage_provider = storage_provider
+            .context("memory backend 'postgres' requires [storage.provider.config] settings")?;
+        let db_url = storage_provider
+            .db_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .context(
+                "memory backend 'postgres' requires [storage.provider.config].db_url (or dbURL)",
+            )?;
+
+        let memory = PostgresMemory::new(
+            db_url,
+            &storage_provider.schema,
+            &storage_provider.table,
+            storage_provider.connect_timeout_secs,
+            Some(storage_provider.pgvector_enabled),
+            Some(storage_provider.pgvector_dimensions),
+        )?;
+        Ok(Box::new(memory))
+    }
+
+    #[cfg(not(feature = "memory-postgres"))]
+    fn build_postgres_memory(
+        _storage_provider: Option<&StorageProviderConfig>,
+    ) -> anyhow::Result<Box<dyn Memory>> {
+        anyhow::bail!(
+            "memory backend 'postgres' requested but this build was compiled without `memory-postgres`; rebuild with `--features memory-postgres`"
+        );
+    }
+
+    if matches!(backend_kind, MemoryBackendKind::Muninndb) {
+        let url = config
+            .muninndb
+            .url
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| std::env::var("MUNINNDB_URL").ok())
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "http://127.0.0.1:8475".to_string());
+        let vault = std::env::var("MUNINNDB_VAULT")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| config.muninndb.vault.clone());
+        let muninndb_api_key = config
+            .muninndb
+            .api_key
+            .clone()
+            .or_else(|| std::env::var("MUNINNDB_API_KEY").ok())
+            .filter(|s| !s.trim().is_empty());
+        tracing::info!(
+            "🧠 MuninnDB memory backend configured (url: {}, vault: {})",
+            url,
+            vault
+        );
+        return Ok(Box::new(MuninndbMemory::new(&url, &vault, muninndb_api_key)));
+    }
+
+>>>>>>> c4666f58 (Add MuninnDB as memory backend)
     if matches!(backend_kind, MemoryBackendKind::Qdrant) {
         let url = config
             .qdrant
