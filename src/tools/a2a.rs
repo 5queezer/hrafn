@@ -503,26 +503,37 @@ mod tests {
 
     #[test]
     fn validate_url_accepts_public_http() {
-        assert!(A2aTool::validate_url("http://agent.example.com:8080").is_ok());
-        assert!(A2aTool::validate_url("https://agent.example.com").is_ok());
+        let tool = test_tool();
+        assert!(tool.validate_url("http://agent.example.com:8080").is_ok());
+        assert!(tool.validate_url("https://agent.example.com").is_ok());
     }
 
     #[test]
     fn validate_url_rejects_non_http() {
-        assert!(A2aTool::validate_url("ftp://host").is_err());
-        assert!(A2aTool::validate_url("file:///etc/passwd").is_err());
+        let tool = test_tool();
+        assert!(tool.validate_url("ftp://host").is_err());
+        assert!(tool.validate_url("file:///etc/passwd").is_err());
     }
 
     #[test]
     fn validate_url_rejects_private_hosts() {
-        assert!(A2aTool::validate_url("http://localhost:9999").is_err());
-        assert!(A2aTool::validate_url("http://127.0.0.1:9999").is_err());
-        assert!(A2aTool::validate_url("http://10.0.0.1").is_err());
-        assert!(A2aTool::validate_url("http://192.168.1.1").is_err());
-        assert!(A2aTool::validate_url("http://172.16.0.1").is_err());
-        assert!(A2aTool::validate_url("http://169.254.169.254").is_err());
-        assert!(A2aTool::validate_url("http://[::1]").is_err());
-        assert!(A2aTool::validate_url("http://foo.local").is_err());
+        let tool = test_tool();
+        assert!(tool.validate_url("http://localhost:9999").is_err());
+        assert!(tool.validate_url("http://127.0.0.1:9999").is_err());
+        assert!(tool.validate_url("http://10.0.0.1").is_err());
+        assert!(tool.validate_url("http://192.168.1.1").is_err());
+        assert!(tool.validate_url("http://172.16.0.1").is_err());
+        assert!(tool.validate_url("http://169.254.169.254").is_err());
+        assert!(tool.validate_url("http://[::1]").is_err());
+        assert!(tool.validate_url("http://foo.local").is_err());
+    }
+
+    #[test]
+    fn validate_url_allows_local_when_enabled() {
+        let security = Arc::new(SecurityPolicy::default());
+        let tool = A2aTool::new(security, 30, true);
+        assert!(tool.validate_url("http://127.0.0.1:42618").is_ok());
+        assert!(tool.validate_url("http://localhost:42618").is_ok());
     }
 
     #[test]
