@@ -1010,7 +1010,11 @@ pub fn all_tools_with_runtime(
             .as_deref()
             .map(|u| u.contains("127.0.0.1") || u.contains("localhost"))
             .unwrap_or(false);
-        tool_arcs.push(Arc::new(a2a::A2aTool::new(security.clone(), 30, allow_local)));
+        tool_arcs.push(Arc::new(a2a::A2aTool::new(
+            security.clone(),
+            30,
+            allow_local,
+        )));
     }
 
     // ── WASM plugin tools (requires plugins-wasm feature) ──
