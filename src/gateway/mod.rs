@@ -2818,7 +2818,7 @@ mod tests {
         // First call: idempotency key is recorded, but process_message uses
         // Config (not state.provider), so with Config::default() it will fail.
         // The important thing is that the idempotency store records the key.
-        let first = handle_webhook(
+        let _first = handle_webhook(
             State(state.clone()),
             test_connect_info(),
             headers.clone(),
