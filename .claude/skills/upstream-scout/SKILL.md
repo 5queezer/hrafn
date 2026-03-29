@@ -91,6 +91,8 @@ Port method: cherry-pick | rewrite | adapt
 Notes: <any context>
 ```
 
+**Tone rule:** Notes are internal by default. If the report may be shared publicly (issues, blog posts, outreach), keep language neutral and factual — state facts ("closed and re-submitted as #NNNN by maintainer same day"), avoid editorializing. Let readers draw their own conclusions.
+
 ## Phase 3: Porting
 
 ### Method selection
@@ -160,7 +162,7 @@ see our [CONTRIBUTING.md](https://github.com/5queezer/hrafn/blob/main/CONTRIBUTI
 - **Never comment on PRs that were closed with a valid explanation.**
 - **Never trash-talk ZeroClaw.** State facts: "closed without comment", "re-submitted as #NNNN." Let readers draw their own conclusions.
 - **One comment per PR.** No follow-ups, no arguments.
-- **Tone: sachlich.** Factual, grateful, inviting. Not promotional.
+- **Tone: neutral and factual.** Grateful, inviting. Not promotional.
 
 ## Limitations
 
