@@ -1,4 +1,4 @@
-# Khắc phục sự cố ZeroClaw
+# Khắc phục sự cố Hrafn
 
 Các lỗi thường gặp khi cài đặt và chạy, kèm cách khắc phục.
 
@@ -78,7 +78,7 @@ cargo build --release --locked --no-default-features --features hardware
 
 Triệu chứng:
 
-- `cargo check` / `cargo build` dừng lâu ở `Checking zeroclaw`
+- `cargo check` / `cargo build` dừng lâu ở `Checking hrafn`
 - Lặp lại thông báo `Blocking waiting for file lock on package cache` hoặc `build directory`
 
 Nguyên nhân:
@@ -119,17 +119,17 @@ pgrep -af "cargo (check|build|test)|cargo check|cargo build|cargo test"
 
 Dừng các cargo job không liên quan trước khi build.
 
-### Không tìm thấy lệnh `zeroclaw` sau cài đặt
+### Không tìm thấy lệnh `hrafn` sau cài đặt
 
 Triệu chứng:
 
-- Cài đặt thành công nhưng shell không tìm thấy `zeroclaw`
+- Cài đặt thành công nhưng shell không tìm thấy `hrafn`
 
 Khắc phục:
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
-which zeroclaw
+which hrafn
 ```
 
 Thêm vào shell profile nếu cần giữ lâu dài.
@@ -141,11 +141,11 @@ Thêm vào shell profile nếu cần giữ lâu dài.
 Kiểm tra:
 
 ```bash
-zeroclaw status
-zeroclaw doctor
+hrafn status
+hrafn doctor
 ```
 
-Xác minh `~/.zeroclaw/config.toml`:
+Xác minh `~/.hrafn/config.toml`:
 
 - `[gateway].host` (mặc định `127.0.0.1`)
 - `[gateway].port` (mặc định `3000`)
@@ -160,7 +160,7 @@ Kiểm tra:
 3. Chạy lại chẩn đoán:
 
 ```bash
-zeroclaw doctor
+hrafn doctor
 ```
 
 ## Sự cố kênh
@@ -174,14 +174,14 @@ Nguyên nhân:
 Khắc phục:
 
 - Chỉ giữ một runtime đang chạy cho token đó
-- Dừng các tiến trình `zeroclaw daemon` / `zeroclaw channel start` thừa
+- Dừng các tiến trình `hrafn daemon` / `hrafn channel start` thừa
 
 ### Kênh không khỏe trong `channel doctor`
 
 Kiểm tra:
 
 ```bash
-zeroclaw channel doctor
+hrafn channel doctor
 ```
 
 Sau đó xác minh thông tin xác thực và trường allowlist cho từng kênh trong config.
@@ -193,26 +193,26 @@ Sau đó xác minh thông tin xác thực và trường allowlist cho từng kê
 Kiểm tra:
 
 ```bash
-zeroclaw service status
+hrafn service status
 ```
 
 Khôi phục:
 
 ```bash
-zeroclaw service stop
-zeroclaw service start
+hrafn service stop
+hrafn service start
 ```
 
 Xem log trên Linux:
 
 ```bash
-journalctl --user -u zeroclaw.service -f
+journalctl --user -u hrafn.service -f
 ```
 
 ## URL cài đặt
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/5queezer/hrafn/master/install.sh | bash
 ```
 
 ## Vẫn chưa giải quyết được?
@@ -220,10 +220,10 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/insta
 Thu thập và đính kèm các thông tin sau khi tạo issue:
 
 ```bash
-zeroclaw --version
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
+hrafn --version
+hrafn status
+hrafn doctor
+hrafn channel doctor
 ```
 
 Kèm thêm: hệ điều hành, cách cài đặt, và đoạn config đã ẩn bí mật.

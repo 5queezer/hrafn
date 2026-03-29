@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/docs/assets/zeroclaw-banner.png" alt="ZeroClaw" width="600" />
+  <img src="https://raw.githubusercontent.com/5queezer/hrafn/master/docs/assets/hrafn-banner.png" alt="Hrafn" width="600" />
 </p>
 
-<h1 align="center">🦀 ZeroClaw — Henkilokohtainen tekoalyavustaja</h1>
+<h1 align="center">🦀 Hrafn — Henkilokohtainen tekoalyavustaja</h1>
 
 <p align="center">
   <strong>Nolla ylimaaraa. Nolla kompromisseja. 100% Rust. 100% Agnostinen.</strong><br>
@@ -10,15 +10,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/actions/workflows/ci-run.yml"><img src="https://img.shields.io/github/actions/workflow/status/zeroclaw-labs/zeroclaw/ci-run.yml?branch=master&label=build" alt="Build Status" /></a>
+  <a href="https://github.com/5queezer/hrafn/actions/workflows/ci-run.yml"><img src="https://img.shields.io/github/actions/workflow/status/5queezer/hrafn/ci-run.yml?branch=master&label=build" alt="Build Status" /></a>
   <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache%202.0-blue.svg" alt="License: MIT OR Apache-2.0" /></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust" alt="Rust Edition 2024" /></a>
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/releases/latest"><img src="https://img.shields.io/badge/version-v0.6.5-blue" alt="Version v0.6.5" /></a>
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/graphs/contributors"><img src="https://img.shields.io/github/contributors/zeroclaw-labs/zeroclaw?color=green" alt="Contributors" /></a>
+  <a href="https://github.com/5queezer/hrafn/releases/latest"><img src="https://img.shields.io/badge/version-v0.6.5-blue" alt="Version v0.6.5" /></a>
+  <a href="https://github.com/5queezer/hrafn/graphs/contributors"><img src="https://img.shields.io/github/contributors/5queezer/hrafn?color=green" alt="Contributors" /></a>
   <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=flat&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
-  <a href="https://x.com/zeroclawlabs?s=21"><img src="https://img.shields.io/badge/X-%40zeroclawlabs-000000?style=flat&logo=x&logoColor=white" alt="X: @zeroclawlabs" /></a>
+  <a href="https://x.com/hrafn?s=21"><img src="https://img.shields.io/badge/X-%40hrafn-000000?style=flat&logo=x&logoColor=white" alt="X: @hrafn" /></a>
   <a href="https://discord.com/invite/wDshRVqRjx"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" /></a>
-  <a href="https://www.reddit.com/r/zeroclawlabs/"><img src="https://img.shields.io/badge/Reddit-r%2Fzeroclawlabs-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/zeroclawlabs" /></a>
+  <a href="https://www.reddit.com/r/hrafn/"><img src="https://img.shields.io/badge/Reddit-r%2Fhrafn-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/hrafn" /></a>
 </p>
 
 <p align="center">
@@ -60,12 +60,12 @@ Rakennettu Harvardin, MIT:n ja Sundai.Club-yhteisöjen opiskelijoiden ja jasenie
   <a href="../nb/README.md">🇳🇴 Norsk</a>
 </p>
 
-ZeroClaw on henkilokohtainen tekoalyavustaja, jota kaytat omilla laitteillasi. Se vastaa sinulle jo kayttamillasi kanavilla (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work ja muut). Silla on web-hallintapaneeli reaaliaikaiseen ohjaukseen ja se voi yhdistaa laitteistoperiferioihin (ESP32, STM32, Arduino, Raspberry Pi). Gateway on vain ohjaustaaso — tuote on avustaja.
+Hrafn on henkilokohtainen tekoalyavustaja, jota kaytat omilla laitteillasi. Se vastaa sinulle jo kayttamillasi kanavilla (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work ja muut). Silla on web-hallintapaneeli reaaliaikaiseen ohjaukseen ja se voi yhdistaa laitteistoperiferioihin (ESP32, STM32, Arduino, Raspberry Pi). Gateway on vain ohjaustaaso — tuote on avustaja.
 
 Jos haluat henkilokohtaisen, yhden kayttajan avustajan, joka tuntuu paikalliselta, nopealta ja aina paalla olevalta, tama on se.
 
 <p align="center">
-  <a href="https://zeroclawlabs.ai">Verkkosivusto</a> ·
+  <a href="https://hrafn.ai">Verkkosivusto</a> ·
   <a href="docs/README.md">Dokumentaatio</a> ·
   <a href="docs/architecture.md">Arkkitehtuuri</a> ·
   <a href="#pikaaloitus-tldr">Aloita</a> ·
@@ -74,7 +74,7 @@ Jos haluat henkilokohtaisen, yhden kayttajan avustajan, joka tuntuu paikalliselt
   <a href="https://discord.com/invite/wDshRVqRjx">Discord</a>
 </p>
 
-> **Suositeltu asennus:** suorita `zeroclaw onboard` terminaalissasi. ZeroClaw Onboard opastaa sinut vaihe vaiheelta gatewayn, tyotilan, kanavien ja palveluntarjoajan asennuksessa. Se on suositeltu asennuspolku ja toimii macOS:lla, Linuxilla ja Windowsilla (WSL2:n kautta). Uusi asennus? Aloita tasta: [Aloita](#pikaaloitus-tldr)
+> **Suositeltu asennus:** suorita `hrafn onboard` terminaalissasi. Hrafn Onboard opastaa sinut vaihe vaiheelta gatewayn, tyotilan, kanavien ja palveluntarjoajan asennuksessa. Se on suositeltu asennuspolku ja toimii macOS:lla, Linuxilla ja Windowsilla (WSL2:n kautta). Uusi asennus? Aloita tasta: [Aloita](#pikaaloitus-tldr)
 
 ### Tilaustunnistautuminen (OAuth)
 
@@ -94,18 +94,18 @@ Ajoymparisto: Rust stable toolchain. Yksi binaari, ei ajoympariston riippuvuuksi
 ### Homebrew (macOS/Linuxbrew)
 
 ```bash
-brew install zeroclaw
+brew install hrafn
 ```
 
 ### Yhden napsautuksen asennus
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/5queezer/hrafn.git
+cd hrafn
 ./install.sh
 ```
 
-`zeroclaw onboard` suoritetaan automaattisesti asennuksen jalkeen tyotilan ja palveluntarjoajan konfiguroimiseksi.
+`hrafn onboard` suoritetaan automaattisesti asennuksen jalkeen tyotilan ja palveluntarjoajan konfiguroimiseksi.
 
 ## Pikaaloitus (TL;DR)
 
@@ -116,67 +116,67 @@ Taysi aloittelijan opas (tunnistautuminen, paritus, kanavat): [Aloita](docs/setu
 ./install.sh --api-key "sk-..." --provider openrouter
 
 # Kaynnista gateway (webhook-palvelin + web-hallintapaneeli)
-zeroclaw gateway                # oletus: 127.0.0.1:42617
-zeroclaw gateway --port 0       # satunnainen portti (turvallisuuskovennettu)
+hrafn gateway                # oletus: 127.0.0.1:42617
+hrafn gateway --port 0       # satunnainen portti (turvallisuuskovennettu)
 
 # Puhu avustajalle
-zeroclaw agent -m "Hello, ZeroClaw!"
+hrafn agent -m "Hello, Hrafn!"
 
 # Interaktiivinen tila
-zeroclaw agent
+hrafn agent
 
 # Kaynnista taysi autonominen ajoymparisto (gateway + kanavat + cron + hands)
-zeroclaw daemon
+hrafn daemon
 
 # Tarkista tila
-zeroclaw status
+hrafn status
 
 # Suorita diagnostiikka
-zeroclaw doctor
+hrafn doctor
 ```
 
-Paivitat? Suorita `zeroclaw doctor` paivityksen jalkeen.
+Paivitat? Suorita `hrafn doctor` paivityksen jalkeen.
 
 ### Lahdekoodista (kehitys)
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/5queezer/hrafn.git
+cd hrafn
 
 cargo build --release --locked
 cargo install --path . --force --locked
 
-zeroclaw onboard
+hrafn onboard
 ```
 
 > **Kehitysvaihtoehto (ei globaalia asennusta):** lisaa komentoihin etuliite `cargo run --release --` (esimerkki: `cargo run --release -- status`).
 
 ## Siirtyminen OpenClawsta
 
-ZeroClaw voi tuoda OpenClaw-tyotilasi, muistisi ja maaritykset:
+Hrafn voi tuoda OpenClaw-tyotilasi, muistisi ja maaritykset:
 
 ```bash
 # Esikatsele mita siirretaan (turvallinen, vain luku)
-zeroclaw migrate openclaw --dry-run
+hrafn migrate openclaw --dry-run
 
 # Suorita siirto
-zeroclaw migrate openclaw
+hrafn migrate openclaw
 ```
 
-Tama siirtaa muistimerkinnot, tyotilan tiedostot ja maaritykset hakemistosta `~/.openclaw/` hakemistoon `~/.zeroclaw/`. Maaritykset muunnetaan automaattisesti JSON:sta TOML:ksi.
+Tama siirtaa muistimerkinnot, tyotilan tiedostot ja maaritykset hakemistosta `~/.openclaw/` hakemistoon `~/.hrafn/`. Maaritykset muunnetaan automaattisesti JSON:sta TOML:ksi.
 
 ## Turvallisuuden oletusasetukset (DM-paasy)
 
-ZeroClaw yhdistaa todellisiin viestintapintoihin. Kasittele saapuvia DM-viesteja luottamattomana syotteena.
+Hrafn yhdistaa todellisiin viestintapintoihin. Kasittele saapuvia DM-viesteja luottamattomana syotteena.
 
 Taysi turvallisuusopas: [SECURITY.md](SECURITY.md)
 
 Oletuskayttaytyminen kaikilla kanavilla:
 
 - **DM-paritus** (oletus): tuntemattomat lahettajat saavat lyhyen parituskoodin ja botti ei kasittele heidan viestiaan.
-- Hyvaksy komennolla: `zeroclaw pairing approve <channel> <code>` (jonka jalkeen lahettaja lisataan paikalliselle sallittujen listalle).
+- Hyvaksy komennolla: `hrafn pairing approve <channel> <code>` (jonka jalkeen lahettaja lisataan paikalliselle sallittujen listalle).
 - Julkiset saapuvat DM:t vaativat nimenomaisen opt-in-asetuksen `config.toml`-tiedostossa.
-- Suorita `zeroclaw doctor` tunnistaaksesi riskilliset tai vaarinkonfiguroidut DM-kaytannot.
+- Suorita `hrafn doctor` tunnistaaksesi riskilliset tai vaarinkonfiguroidut DM-kaytannot.
 
 **Autonomiatasot:**
 
@@ -197,7 +197,7 @@ Kayta tata taulua tarkeisiin ilmoituksiin (yhteensopivuutta rikkovat muutokset, 
 
 | Paivamaara (UTC) | Taso | Ilmoitus | Toimenpide |
 | ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-02-19 | _Kriittinen_ | **Emme** ole yhteydessa `openagen/zeroclaw`-, `zeroclaw.org`- tai `zeroclaw.net`-sivustoihin. `zeroclaw.org`- ja `zeroclaw.net`-verkkotunnukset osoittavat talla hetkella `openagen/zeroclaw`-haaraan, ja tuo verkkotunnus/varasto esiintyy virallisen verkkosivustomme/projektimme nimissa. | Ala luota naista lahteista perasin oleviin tietoihin, binaareihin, varainkeruuseen tai ilmoituksiin. Kayta vain [tata varastoa](https://github.com/zeroclaw-labs/zeroclaw) ja vahvistettuja sosiaalisen median tilejamme. |
+| 2026-02-19 | _Kriittinen_ | **Emme** ole yhteydessa `openagen/hrafn`-, `hrafn.org`- tai `hrafn.net`-sivustoihin. `hrafn.org`- ja `hrafn.net`-verkkotunnukset osoittavat talla hetkella `openagen/hrafn`-haaraan, ja tuo verkkotunnus/varasto esiintyy virallisen verkkosivustomme/projektimme nimissa. | Ala luota naista lahteista perasin oleviin tietoihin, binaareihin, varainkeruuseen tai ilmoituksiin. Kayta vain [tata varastoa](https://github.com/5queezer/hrafn) ja vahvistettuja sosiaalisen median tilejamme. |
 | 2026-02-19 | _Tarkea_ | Anthropic paivitti tunnistautumis- ja tunnistetietojen kaytonehdat 2026-02-19. Claude Code OAuth -tokenit (Free, Pro, Max) on tarkoitettu yksinomaan Claude Codelle ja Claude.ai:lle; OAuth-tokenien kayttaminen Claude Free/Pro/Max -palvelusta missaan muussa tuotteessa, tyokalussa tai palvelussa (mukaan lukien Agent SDK) ei ole sallittua ja voi rikkoa kuluttajakayttoehtoja. | Ole hyva ja valta valikaisesti Claude Code OAuth -integraatioita mahdollisen menetyksen estamiseksi. Alkuperainen lauseke: [Authentication and Credential Use](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use). |
 
 ## Kohokodat
@@ -217,18 +217,18 @@ Kayta tata taulua tarkeisiin ilmoituksiin (yhteensopivuutta rikkovat muutokset, 
 - **Taitoplattformi** — sisaanrakennetut, yhteison ja tyotilan taidot turvallisuustarkastuksella.
 - **Tunnelituki** — Cloudflare, Tailscale, ngrok, OpenVPN ja mukautetut tunnelit etapaasyyn.
 
-### Miksi tiimit valitsevat ZeroClaw:n
+### Miksi tiimit valitsevat Hrafn:n
 
 - **Kevyt oletuksena:** pieni Rust-binaari, nopea kaynnistys, alhainen muistijalanjalki.
 - **Turvallinen suunnittelulla:** paritus, tiukka sandboxing, nimenomaiset sallittujen listat, tyotilan rajaus.
 - **Taysin vaihdettava:** ydinjarjestelmat ovat traiteja (providers, channels, tools, memory, tunnels).
 - **Ei lukkiutumista:** OpenAI-yhteensopiva palveluntarjoajatuki + liitettavat mukautetut paatepisteet.
 
-## Vertailun tilannekuva (ZeroClaw vs OpenClaw, Toistettava)
+## Vertailun tilannekuva (Hrafn vs OpenClaw, Toistettava)
 
 Paikallisen koneen pikavertailu (macOS arm64, helmi 2026) normalisoitu 0.8GHz reunalaitteistolle.
 
-|                           | OpenClaw      | NanoBot        | PicoClaw        | ZeroClaw 🦀          |
+|                           | OpenClaw      | NanoBot        | PicoClaw        | Hrafn 🦀          |
 | ------------------------- | ------------- | -------------- | --------------- | -------------------- |
 | **Kieli**                 | TypeScript    | Python         | Go              | **Rust**             |
 | **RAM**                   | > 1GB         | > 100MB        | < 10MB          | **< 5MB**            |
@@ -236,20 +236,20 @@ Paikallisen koneen pikavertailu (macOS arm64, helmi 2026) normalisoitu 0.8GHz re
 | **Binaarin koko**         | ~28MB (dist)  | N/A (Scripts)  | ~8MB            | **~8.8 MB**          |
 | **Kustannus**             | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | **Mika tahansa laitteisto $10** |
 
-> Huomautukset: ZeroClaw-tulokset mitattu release-buildeilla kayttaen `/usr/bin/time -l`. OpenClaw vaatii Node.js-ajoympariston (tyypillisesti ~390MB ylimaaraista muistikuormaa), kun taas NanoBot vaatii Python-ajoympariston. PicoClaw ja ZeroClaw ovat staattisia binaareja. Yllaolevat RAM-luvut ovat ajoaikaista muistia; kaannosaikaiset vaatimukset ovat korkeammat.
+> Huomautukset: Hrafn-tulokset mitattu release-buildeilla kayttaen `/usr/bin/time -l`. OpenClaw vaatii Node.js-ajoympariston (tyypillisesti ~390MB ylimaaraista muistikuormaa), kun taas NanoBot vaatii Python-ajoympariston. PicoClaw ja Hrafn ovat staattisia binaareja. Yllaolevat RAM-luvut ovat ajoaikaista muistia; kaannosaikaiset vaatimukset ovat korkeammat.
 
 <p align="center">
-  <img src="docs/assets/zeroclaw-comparison.jpeg" alt="ZeroClaw vs OpenClaw Comparison" width="800" />
+  <img src="docs/assets/hrafn-comparison.jpeg" alt="Hrafn vs OpenClaw Comparison" width="800" />
 </p>
 
 ### Toistettava paikallinen mittaus
 
 ```bash
 cargo build --release
-ls -lh target/release/zeroclaw
+ls -lh target/release/hrafn
 
-/usr/bin/time -l target/release/zeroclaw --help
-/usr/bin/time -l target/release/zeroclaw status
+/usr/bin/time -l target/release/hrafn --help
+/usr/bin/time -l target/release/hrafn status
 ```
 
 ## Kaikki mita olemme rakentaneet tahan mennessa
@@ -325,7 +325,7 @@ React 19 + Vite 6 + Tailwind CSS 4 web-hallintapaneeli, jota tarjoillaan suoraan
 
 ## Maaritykset
 
-Minimaalinen `~/.zeroclaw/config.toml`:
+Minimaalinen `~/.hrafn/config.toml`:
 
 ```toml
 default_provider = "anthropic"
@@ -393,35 +393,35 @@ Aseta `runtime.kind = "docker"` tiukkaan sandboxingiin tai verkon eristykseen.
 
 ## Tilaustunnistautuminen (OpenAI Codex / Claude Code / Gemini)
 
-ZeroClaw tukee tilausnatiiveja tunnistautumisprofiileja (useita tileja, salattu levossa).
+Hrafn tukee tilausnatiiveja tunnistautumisprofiileja (useita tileja, salattu levossa).
 
-- Tallennustiedosto: `~/.zeroclaw/auth-profiles.json`
-- Salausavain: `~/.zeroclaw/.secret_key`
+- Tallennustiedosto: `~/.hrafn/auth-profiles.json`
+- Salausavain: `~/.hrafn/.secret_key`
 - Profiilin tunnistemuoto: `<provider>:<profile_name>` (esimerkki: `openai-codex:work`)
 
 ```bash
 # OpenAI Codex OAuth (ChatGPT subscription)
-zeroclaw auth login --provider openai-codex --device-code
+hrafn auth login --provider openai-codex --device-code
 
 # Gemini OAuth
-zeroclaw auth login --provider gemini --profile default
+hrafn auth login --provider gemini --profile default
 
 # Anthropic setup-token
-zeroclaw auth paste-token --provider anthropic --profile default --auth-kind authorization
+hrafn auth paste-token --provider anthropic --profile default --auth-kind authorization
 
 # Check / refresh / switch profile
-zeroclaw auth status
-zeroclaw auth refresh --provider openai-codex --profile default
-zeroclaw auth use --provider openai-codex --profile work
+hrafn auth status
+hrafn auth refresh --provider openai-codex --profile default
+hrafn auth use --provider openai-codex --profile work
 
 # Run the agent with subscription auth
-zeroclaw agent --provider openai-codex -m "hello"
-zeroclaw agent --provider anthropic -m "hello"
+hrafn agent --provider openai-codex -m "hello"
+hrafn agent --provider anthropic -m "hello"
 ```
 
 ## Agentin tyotila + taidot
 
-Tyotilan juuri: `~/.zeroclaw/workspace/` (konfiguroitavissa maaritysten kautta).
+Tyotilan juuri: `~/.hrafn/workspace/` (konfiguroitavissa maaritysten kautta).
 
 Injektoidut kehotetiedostot:
 - `IDENTITY.md` — agentin persoona ja rooli
@@ -430,74 +430,74 @@ Injektoidut kehotetiedostot:
 - `AGENTS.md` — istuntokonventiot ja alustussaannot
 - `SOUL.md` — ydinidentiteetti ja toimintaperiaatteet
 
-Taidot: `~/.zeroclaw/workspace/skills/<skill>/SKILL.md` tai `SKILL.toml`.
+Taidot: `~/.hrafn/workspace/skills/<skill>/SKILL.md` tai `SKILL.toml`.
 
 ```bash
 # List installed skills
-zeroclaw skills list
+hrafn skills list
 
 # Install from git
-zeroclaw skills install https://github.com/user/my-skill.git
+hrafn skills install https://github.com/user/my-skill.git
 
 # Security audit before install
-zeroclaw skills audit https://github.com/user/my-skill.git
+hrafn skills audit https://github.com/user/my-skill.git
 
 # Remove a skill
-zeroclaw skills remove my-skill
+hrafn skills remove my-skill
 ```
 
 ## CLI-komennot
 
 ```bash
 # Tyotilan hallinta
-zeroclaw onboard              # Opastettu asennusvelho
-zeroclaw status               # Nayta daemon/agentin tila
-zeroclaw doctor               # Suorita jarjestelman diagnostiikka
+hrafn onboard              # Opastettu asennusvelho
+hrafn status               # Nayta daemon/agentin tila
+hrafn doctor               # Suorita jarjestelman diagnostiikka
 
 # Gateway + daemon
-zeroclaw gateway              # Kaynnista gateway-palvelin (127.0.0.1:42617)
-zeroclaw daemon               # Kaynnista taysi autonominen ajoymparisto
+hrafn gateway              # Kaynnista gateway-palvelin (127.0.0.1:42617)
+hrafn daemon               # Kaynnista taysi autonominen ajoymparisto
 
 # Agentti
-zeroclaw agent                # Interaktiivinen keskustelutila
-zeroclaw agent -m "message"   # Yksittaisen viestin tila
+hrafn agent                # Interaktiivinen keskustelutila
+hrafn agent -m "message"   # Yksittaisen viestin tila
 
 # Palvelun hallinta
-zeroclaw service install      # Asenna OS-palveluna (launchd/systemd)
-zeroclaw service start|stop|restart|status
+hrafn service install      # Asenna OS-palveluna (launchd/systemd)
+hrafn service start|stop|restart|status
 
 # Kanavat
-zeroclaw channel list         # Listaa konfiguroidut kanavat
-zeroclaw channel doctor       # Tarkista kanavien terveys
-zeroclaw channel bind-telegram 123456789
+hrafn channel list         # Listaa konfiguroidut kanavat
+hrafn channel doctor       # Tarkista kanavien terveys
+hrafn channel bind-telegram 123456789
 
 # Cron + ajastus
-zeroclaw cron list            # Listaa ajastetut tehtavat
-zeroclaw cron add "*/5 * * * *" --prompt "Check system health"
-zeroclaw cron remove <id>
+hrafn cron list            # Listaa ajastetut tehtavat
+hrafn cron add "*/5 * * * *" --prompt "Check system health"
+hrafn cron remove <id>
 
 # Muisti
-zeroclaw memory list          # Listaa muistimerkinnot
-zeroclaw memory get <key>     # Hae muisti
-zeroclaw memory stats         # Muistin tilastot
+hrafn memory list          # Listaa muistimerkinnot
+hrafn memory get <key>     # Hae muisti
+hrafn memory stats         # Muistin tilastot
 
 # Tunnistautumisprofiilit
-zeroclaw auth login --provider <name>
-zeroclaw auth status
-zeroclaw auth use --provider <name> --profile <profile>
+hrafn auth login --provider <name>
+hrafn auth status
+hrafn auth use --provider <name> --profile <profile>
 
 # Laitteistoperiferiat
-zeroclaw hardware discover    # Etsi yhdistettuja laitteita
-zeroclaw peripheral list      # Listaa yhdistetyt periferiat
-zeroclaw peripheral flash     # Flash-ohjelma laitteeseen
+hrafn hardware discover    # Etsi yhdistettuja laitteita
+hrafn peripheral list      # Listaa yhdistetyt periferiat
+hrafn peripheral flash     # Flash-ohjelma laitteeseen
 
 # Siirto
-zeroclaw migrate openclaw --dry-run
-zeroclaw migrate openclaw
+hrafn migrate openclaw --dry-run
+hrafn migrate openclaw
 
 # Shell-taydennykset
-source <(zeroclaw completions bash)
-zeroclaw completions zsh > ~/.zfunc/_zeroclaw
+source <(hrafn completions bash)
+hrafn completions zsh > ~/.zfunc/_hrafn
 ```
 
 Taysi komentoreferenssi: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md)
@@ -565,10 +565,10 @@ Taysi komentoreferenssi: [docs/reference/cli/commands-reference.md](docs/referen
 
 #### Yhden rivin asentaja
 
-Tai ohita yllaolevat vaiheet ja asenna kaikki (jarjestelmariippuvuudet, Rust, ZeroClaw) yhdella komennolla:
+Tai ohita yllaolevat vaiheet ja asenna kaikki (jarjestelmariippuvuudet, Rust, Hrafn) yhdella komennolla:
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -LsSf https://raw.githubusercontent.com/5queezer/hrafn/master/install.sh | bash
 ```
 
 #### Kaannosresurssivaatimukset
@@ -611,7 +611,7 @@ Julkaisuresurssit julkaistaan seuraaville:
 - Windows: `x86_64`
 
 Lataa uusimmat resurssit osoitteesta:
-<https://github.com/zeroclaw-labs/zeroclaw/releases/latest>
+<https://github.com/5queezer/hrafn/releases/latest>
 
 ## Dokumentaatio
 
@@ -621,7 +621,7 @@ Kayta naita, kun olet ohittanut onboarding-kulun ja haluat syvemman viitteen.
 - Lue [arkkitehtuurin yleiskatsaus](docs/architecture.md) taydelliseen jarjestelmamalliin.
 - Kayta [maaritysviitetta](docs/reference/api/config-reference.md), kun tarvitset jokaisen avaimen ja esimerkin.
 - Suorita Gateway kirjan mukaan [kayttokirjalla](docs/ops/operations-runbook.md).
-- Noudata [ZeroClaw Onboard](#pikaaloitus-tldr) -palvelua opastettuun asennukseen.
+- Noudata [Hrafn Onboard](#pikaaloitus-tldr) -palvelua opastettuun asennukseen.
 - Korjaa yleisia vikoja [vianetsintaoppaalla](docs/ops/troubleshooting.md).
 - Tarkista [turvallisuusohjeet](docs/security/README.md) ennen kuin paljastat mitaan.
 
@@ -653,14 +653,14 @@ Kayta naita, kun olet ohittanut onboarding-kulun ja haluat syvemman viitteen.
 
 ## Smooth Crab 🦀
 
-ZeroClaw rakennettiin smooth crab 🦀 -kaveria varten, nopea ja tehokas tekoalyavustaja. Rakennettu Argenis De La Rosan ja yhteison toimesta.
+Hrafn rakennettiin smooth crab 🦀 -kaveria varten, nopea ja tehokas tekoalyavustaja. Rakennettu Argenis De La Rosan ja yhteison toimesta.
 
-- [zeroclawlabs.ai](https://zeroclawlabs.ai)
-- [@zeroclawlabs](https://x.com/zeroclawlabs)
+- [hrafn.ai](https://hrafn.ai)
+- [@hrafn](https://x.com/hrafn)
 
-## Tue ZeroClaw:ta
+## Tue Hrafn:ta
 
-Jos ZeroClaw auttaa tyossasi ja haluat tukea jatkuvaa kehitysta, voit lahjoittaa tassa:
+Jos Hrafn auttaa tyossasi ja haluat tukea jatkuvaa kehitysta, voit lahjoittaa tassa:
 
 <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=for-the-badge&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
 
@@ -677,7 +677,7 @@ Rakennamme avoimesti, koska parhaat ideat tulevat kaikkialta. Jos luet taman, ol
 
 ## Osallistuminen
 
-Uusi ZeroClaw:ssa? Etsi issueita merkinnalla [`good first issue`](https://github.com/zeroclaw-labs/zeroclaw/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — katso [Osallistumisoppaamme](CONTRIBUTING.md#first-time-contributors) aloittaaksesi. AI/vibe-koodatut PR:t tervetulleita! 🤖
+Uusi Hrafn:ssa? Etsi issueita merkinnalla [`good first issue`](https://github.com/5queezer/hrafn/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — katso [Osallistumisoppaamme](CONTRIBUTING.md#first-time-contributors) aloittaaksesi. AI/vibe-koodatut PR:t tervetulleita! 🤖
 
 Katso [CONTRIBUTING.md](CONTRIBUTING.md) ja [CLA.md](docs/contributing/cla.md). Toteuta trait, laheta PR:
 
@@ -689,26 +689,26 @@ Katso [CONTRIBUTING.md](CONTRIBUTING.md) ja [CLA.md](docs/contributing/cla.md). 
 - Uusi `Memory` → `src/memory/`
 - Uusi `Tunnel` → `src/tunnel/`
 - Uusi `Peripheral` → `src/peripherals/`
-- Uusi `Skill` → `~/.zeroclaw/workspace/skills/<name>/`
+- Uusi `Skill` → `~/.hrafn/workspace/skills/<name>/`
 
 <!-- BEGIN:RECENT_CONTRIBUTORS -->
 <!-- END:RECENT_CONTRIBUTORS -->
 
 ## ⚠️ Virallinen varasto ja esiintymisvaroitus
 
-**Tama on ainoa virallinen ZeroClaw-varasto:**
+**Tama on ainoa virallinen Hrafn-varasto:**
 
-> https://github.com/zeroclaw-labs/zeroclaw
+> https://github.com/5queezer/hrafn
 
-Mika tahansa muu varasto, organisaatio, verkkotunnus tai paketti, joka vaittaa olevansa "ZeroClaw" tai viittaa yhteyteen ZeroClaw Labsin kanssa, on **luvaton eika liity tahan projektiin**. Tunnetut luvattomat forkit listataan [TRADEMARK.md](docs/maintainers/trademark.md)-tiedostossa.
+Mika tahansa muu varasto, organisaatio, verkkotunnus tai paketti, joka vaittaa olevansa "Hrafn" tai viittaa yhteyteen Hrafn Labsin kanssa, on **luvaton eika liity tahan projektiin**. Tunnetut luvattomat forkit listataan [TRADEMARK.md](docs/maintainers/trademark.md)-tiedostossa.
 
-Jos kohtaat esiintymista tai tavaramerkin vaarinkayttoa, ole hyva ja [avaa issue](https://github.com/zeroclaw-labs/zeroclaw/issues).
+Jos kohtaat esiintymista tai tavaramerkin vaarinkayttoa, ole hyva ja [avaa issue](https://github.com/5queezer/hrafn/issues).
 
 ---
 
 ## Lisenssi
 
-ZeroClaw on kaksoislisenssoitu maksimaalisen avoimuuden ja osallistujien suojan takaamiseksi:
+Hrafn on kaksoislisenssoitu maksimaalisen avoimuuden ja osallistujien suojan takaamiseksi:
 
 | Lisenssi | Kayttotapaus |
 |---|---|
@@ -719,7 +719,7 @@ Voit valita kumman tahansa lisenssin. **Osallistujat myontavat automaattisesti o
 
 ### Tavaramerkki
 
-**ZeroClaw**-nimi ja logo ovat ZeroClaw Labsin tavaramerkkeja. Tama lisenssi ei anna lupaa kayttaa niita tuen tai yhteyden vihjamiseen. Katso [TRADEMARK.md](docs/maintainers/trademark.md) sallittujen ja kiellettyjen kayttojen osalta.
+**Hrafn**-nimi ja logo ovat Hrafn Labsin tavaramerkkeja. Tama lisenssi ei anna lupaa kayttaa niita tuen tai yhteyden vihjamiseen. Katso [TRADEMARK.md](docs/maintainers/trademark.md) sallittujen ja kiellettyjen kayttojen osalta.
 
 ### Osallistujien suojat
 
@@ -730,12 +730,12 @@ Voit valita kumman tahansa lisenssin. **Osallistujat myontavat automaattisesti o
 
 ---
 
-**ZeroClaw** — Nolla ylimaaraa. Nolla kompromisseja. Kayttoönotto minne tahansa. Vaihda mita tahansa. 🦀
+**Hrafn** — Nolla ylimaaraa. Nolla kompromisseja. Kayttoönotto minne tahansa. Vaihda mita tahansa. 🦀
 
 ## Osallistujat
 
-<a href="https://github.com/zeroclaw-labs/zeroclaw/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=zeroclaw-labs/zeroclaw" alt="ZeroClaw contributors" />
+<a href="https://github.com/5queezer/hrafn/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=5queezer/hrafn" alt="Hrafn contributors" />
 </a>
 
 Tama lista luodaan GitHubin osallistujakaaviosta ja paivittyy automaattisesti.
@@ -743,11 +743,11 @@ Tama lista luodaan GitHubin osallistujakaaviosta ja paivittyy automaattisesti.
 ## Tahtihistoria
 
 <p align="center">
-  <a href="https://www.star-history.com/#zeroclaw-labs/zeroclaw&type=date&legend=top-left">
+  <a href="https://www.star-history.com/#5queezer/hrafn&type=date&legend=top-left">
     <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&theme=dark&legend=top-left" />
-     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&legend=top-left" />
-     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&legend=top-left" />
+     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=5queezer/hrafn&type=date&theme=dark&legend=top-left" />
+     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=5queezer/hrafn&type=date&legend=top-left" />
+     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=5queezer/hrafn&type=date&legend=top-left" />
     </picture>
   </a>
 </p>

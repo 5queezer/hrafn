@@ -1700,7 +1700,7 @@ mod tests {
             from_address: "agent@example.com".to_string(),
             idle_timeout_secs: 1740,
             allowed_senders: vec!["*".to_string()],
-            default_subject: "ZeroClaw Message".to_string(),
+            default_subject: "Hrafn Message".to_string(),
             max_attachment_bytes: 25 * 1024 * 1024,
         });
         cfg.model_routes = vec![crate::config::schema::ModelRouteConfig {
@@ -1837,7 +1837,7 @@ mod tests {
             from_address: "agent@example.com".to_string(),
             idle_timeout_secs: 1740,
             allowed_senders: vec!["*".to_string()],
-            default_subject: "ZeroClaw Message".to_string(),
+            default_subject: "Hrafn Message".to_string(),
             max_attachment_bytes: 25 * 1024 * 1024,
         });
         current.model_routes = vec![

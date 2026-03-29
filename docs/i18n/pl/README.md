@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/docs/assets/zeroclaw-banner.png" alt="ZeroClaw" width="600" />
+  <img src="https://raw.githubusercontent.com/5queezer/hrafn/master/docs/assets/hrafn-banner.png" alt="Hrafn" width="600" />
 </p>
 
-<h1 align="center">🦀 ZeroClaw — Osobisty Asystent AI</h1>
+<h1 align="center">🦀 Hrafn — Osobisty Asystent AI</h1>
 
 <p align="center">
   <strong>Zero narzutu. Zero kompromisów. 100% Rust. 100% Agnostyczny.</strong><br>
@@ -10,15 +10,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/actions/workflows/ci-run.yml"><img src="https://img.shields.io/github/actions/workflow/status/zeroclaw-labs/zeroclaw/ci-run.yml?branch=master&label=build" alt="Build Status" /></a>
+  <a href="https://github.com/5queezer/hrafn/actions/workflows/ci-run.yml"><img src="https://img.shields.io/github/actions/workflow/status/5queezer/hrafn/ci-run.yml?branch=master&label=build" alt="Build Status" /></a>
   <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache%202.0-blue.svg" alt="License: MIT OR Apache-2.0" /></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust" alt="Rust Edition 2024" /></a>
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/releases/latest"><img src="https://img.shields.io/badge/version-v0.6.5-blue" alt="Version v0.6.5" /></a>
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/graphs/contributors"><img src="https://img.shields.io/github/contributors/zeroclaw-labs/zeroclaw?color=green" alt="Contributors" /></a>
+  <a href="https://github.com/5queezer/hrafn/releases/latest"><img src="https://img.shields.io/badge/version-v0.6.5-blue" alt="Version v0.6.5" /></a>
+  <a href="https://github.com/5queezer/hrafn/graphs/contributors"><img src="https://img.shields.io/github/contributors/5queezer/hrafn?color=green" alt="Contributors" /></a>
   <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=flat&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
-  <a href="https://x.com/zeroclawlabs?s=21"><img src="https://img.shields.io/badge/X-%40zeroclawlabs-000000?style=flat&logo=x&logoColor=white" alt="X: @zeroclawlabs" /></a>
+  <a href="https://x.com/hrafn?s=21"><img src="https://img.shields.io/badge/X-%40hrafn-000000?style=flat&logo=x&logoColor=white" alt="X: @hrafn" /></a>
   <a href="https://discord.com/invite/wDshRVqRjx"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" /></a>
-  <a href="https://www.reddit.com/r/zeroclawlabs/"><img src="https://img.shields.io/badge/Reddit-r%2Fzeroclawlabs-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/zeroclawlabs" /></a>
+  <a href="https://www.reddit.com/r/hrafn/"><img src="https://img.shields.io/badge/Reddit-r%2Fhrafn-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/hrafn" /></a>
 </p>
 
 <p align="center">
@@ -60,12 +60,12 @@ Stworzone przez studentów i członków społeczności Harvard, MIT i Sundai.Clu
   <a href="../nb/README.md">🇳🇴 Norsk</a>
 </p>
 
-ZeroClaw to osobisty asystent AI, który uruchamiasz na własnych urządzeniach. Odpowiada na kanałach, których już używasz (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work i więcej). Posiada panel webowy do kontroli w czasie rzeczywistym i może łączyć się z peryferiami sprzętowymi (ESP32, STM32, Arduino, Raspberry Pi). Gateway to tylko warstwa sterowania — produktem jest asystent.
+Hrafn to osobisty asystent AI, który uruchamiasz na własnych urządzeniach. Odpowiada na kanałach, których już używasz (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work i więcej). Posiada panel webowy do kontroli w czasie rzeczywistym i może łączyć się z peryferiami sprzętowymi (ESP32, STM32, Arduino, Raspberry Pi). Gateway to tylko warstwa sterowania — produktem jest asystent.
 
 Jeśli szukasz osobistego, jednoosobowego asystenta, który działa lokalnie, szybko i jest zawsze dostępny — to jest to.
 
 <p align="center">
-  <a href="https://zeroclawlabs.ai">Strona internetowa</a> ·
+  <a href="https://hrafn.ai">Strona internetowa</a> ·
   <a href="docs/README.md">Dokumentacja</a> ·
   <a href="docs/architecture.md">Architektura</a> ·
   <a href="#szybki-start">Rozpocznij</a> ·
@@ -74,7 +74,7 @@ Jeśli szukasz osobistego, jednoosobowego asystenta, który działa lokalnie, sz
   <a href="https://discord.com/invite/wDshRVqRjx">Discord</a>
 </p>
 
-> **Zalecana konfiguracja:** uruchom `zeroclaw onboard` w terminalu. ZeroClaw Onboard prowadzi Cię krok po kroku przez konfigurację gateway, workspace, kanałów i dostawcy. Jest to zalecana ścieżka konfiguracji i działa na macOS, Linux i Windows (przez WSL2). Nowa instalacja? Zacznij tutaj: [Rozpocznij](#szybki-start)
+> **Zalecana konfiguracja:** uruchom `hrafn onboard` w terminalu. Hrafn Onboard prowadzi Cię krok po kroku przez konfigurację gateway, workspace, kanałów i dostawcy. Jest to zalecana ścieżka konfiguracji i działa na macOS, Linux i Windows (przez WSL2). Nowa instalacja? Zacznij tutaj: [Rozpocznij](#szybki-start)
 
 ### Uwierzytelnianie subskrypcyjne (OAuth)
 
@@ -94,18 +94,18 @@ Rotacja profili autoryzacyjnych (OAuth vs klucze API) + failover: [Failover mode
 ### Homebrew (macOS/Linuxbrew)
 
 ```bash
-brew install zeroclaw
+brew install hrafn
 ```
 
 ### Instalacja jednym kliknięciem
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/5queezer/hrafn.git
+cd hrafn
 ./install.sh
 ```
 
-`zeroclaw onboard` uruchamia się automatycznie po instalacji, aby skonfigurować workspace i dostawcę.
+`hrafn onboard` uruchamia się automatycznie po instalacji, aby skonfigurować workspace i dostawcę.
 
 ## Szybki start (TL;DR)
 
@@ -116,67 +116,67 @@ Pełny przewodnik dla początkujących (autoryzacja, parowanie, kanały): [Rozpo
 ./install.sh --api-key "sk-..." --provider openrouter
 
 # Uruchom gateway (serwer webhook + panel webowy)
-zeroclaw gateway                # domyślnie: 127.0.0.1:42617
-zeroclaw gateway --port 0       # losowy port (wzmocnione bezpieczeństwo)
+hrafn gateway                # domyślnie: 127.0.0.1:42617
+hrafn gateway --port 0       # losowy port (wzmocnione bezpieczeństwo)
 
 # Porozmawiaj z asystentem
-zeroclaw agent -m "Hello, ZeroClaw!"
+hrafn agent -m "Hello, Hrafn!"
 
 # Tryb interaktywny
-zeroclaw agent
+hrafn agent
 
 # Uruchom pełne autonomiczne środowisko (gateway + kanały + cron + hands)
-zeroclaw daemon
+hrafn daemon
 
 # Sprawdź status
-zeroclaw status
+hrafn status
 
 # Uruchom diagnostykę
-zeroclaw doctor
+hrafn doctor
 ```
 
-Aktualizujesz? Uruchom `zeroclaw doctor` po aktualizacji.
+Aktualizujesz? Uruchom `hrafn doctor` po aktualizacji.
 
 ### Ze źródła (rozwój)
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/5queezer/hrafn.git
+cd hrafn
 
 cargo build --release --locked
 cargo install --path . --force --locked
 
-zeroclaw onboard
+hrafn onboard
 ```
 
 > **Tryb deweloperski (bez globalnej instalacji):** poprzedź komendy `cargo run --release --` (przykład: `cargo run --release -- status`).
 
 ## Migracja z OpenClaw
 
-ZeroClaw może zaimportować Twój workspace, pamięć i konfigurację OpenClaw:
+Hrafn może zaimportować Twój workspace, pamięć i konfigurację OpenClaw:
 
 ```bash
 # Podgląd tego, co zostanie zmigrowane (bezpieczne, tylko odczyt)
-zeroclaw migrate openclaw --dry-run
+hrafn migrate openclaw --dry-run
 
 # Uruchom migrację
-zeroclaw migrate openclaw
+hrafn migrate openclaw
 ```
 
-Migruje wpisy pamięci, pliki workspace i konfigurację z `~/.openclaw/` do `~/.zeroclaw/`. Konfiguracja jest automatycznie konwertowana z JSON do TOML.
+Migruje wpisy pamięci, pliki workspace i konfigurację z `~/.openclaw/` do `~/.hrafn/`. Konfiguracja jest automatycznie konwertowana z JSON do TOML.
 
 ## Domyślne ustawienia bezpieczeństwa (dostęp DM)
 
-ZeroClaw łączy się z prawdziwymi platformami komunikacyjnymi. Traktuj przychodzące DM jako niezaufane dane wejściowe.
+Hrafn łączy się z prawdziwymi platformami komunikacyjnymi. Traktuj przychodzące DM jako niezaufane dane wejściowe.
 
 Pełny przewodnik bezpieczeństwa: [SECURITY.md](SECURITY.md)
 
 Domyślne zachowanie na wszystkich kanałach:
 
 - **Parowanie DM** (domyślne): nieznani nadawcy otrzymują krótki kod parowania i bot nie przetwarza ich wiadomości.
-- Zatwierdź za pomocą: `zeroclaw pairing approve <channel> <code>` (wtedy nadawca jest dodawany do lokalnej listy dozwolonych).
+- Zatwierdź za pomocą: `hrafn pairing approve <channel> <code>` (wtedy nadawca jest dodawany do lokalnej listy dozwolonych).
 - Publiczne przychodzące DM wymagają jawnej zgody w `config.toml`.
-- Uruchom `zeroclaw doctor`, aby wykryć ryzykowne lub błędnie skonfigurowane polityki DM.
+- Uruchom `hrafn doctor`, aby wykryć ryzykowne lub błędnie skonfigurowane polityki DM.
 
 **Poziomy autonomii:**
 
@@ -197,7 +197,7 @@ Użyj tej tablicy do ważnych ogłoszeń (zmiany łamiące, porady bezpieczeńst
 
 | Data (UTC) | Poziom       | Ogłoszenie                                                                                                                                                                                                                                                                                                                                                 | Działanie                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-02-19 | _Krytyczny_  | **Nie jesteśmy powiązani** z `openagen/zeroclaw`, `zeroclaw.org` ani `zeroclaw.net`. Domeny `zeroclaw.org` i `zeroclaw.net` obecnie kierują do forka `openagen/zeroclaw`, a ta domena/repozytorium podszywają się pod naszą oficjalną stronę/projekt.                                                                                       | Nie ufaj informacjom, plikom binarnym, zbiórkom funduszy ani ogłoszeniom z tych źródeł. Używaj wyłącznie [tego repozytorium](https://github.com/zeroclaw-labs/zeroclaw) i naszych zweryfikowanych kont społecznościowych.                                                                                                                                                                                                                                                                                                                                                                       |
+| 2026-02-19 | _Krytyczny_  | **Nie jesteśmy powiązani** z `openagen/hrafn`, `hrafn.org` ani `hrafn.net`. Domeny `hrafn.org` i `hrafn.net` obecnie kierują do forka `openagen/hrafn`, a ta domena/repozytorium podszywają się pod naszą oficjalną stronę/projekt.                                                                                       | Nie ufaj informacjom, plikom binarnym, zbiórkom funduszy ani ogłoszeniom z tych źródeł. Używaj wyłącznie [tego repozytorium](https://github.com/5queezer/hrafn) i naszych zweryfikowanych kont społecznościowych.                                                                                                                                                                                                                                                                                                                                                                       |
 | 2026-02-19 | _Ważny_ | Anthropic zaktualizował warunki uwierzytelniania i użytkowania poświadczeń 2026-02-19. Tokeny OAuth Claude Code (Free, Pro, Max) są przeznaczone wyłącznie dla Claude Code i Claude.ai; używanie tokenów OAuth z Claude Free/Pro/Max w jakimkolwiek innym produkcie, narzędziu lub usłudze (w tym Agent SDK) nie jest dozwolone i może naruszać Warunki korzystania z usługi. | Proszę tymczasowo unikać integracji OAuth Claude Code, aby zapobiec potencjalnym stratom. Oryginalna klauzula: [Authentication and Credential Use](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use).                                                                                                                                                                                                                                                                                                                                                    |
 
 ## Najważniejsze cechy
@@ -217,18 +217,18 @@ Użyj tej tablicy do ważnych ogłoszeń (zmiany łamiące, porady bezpieczeńst
 - **Platforma umiejętności** — wbudowane, społecznościowe i workspace skills z audytem bezpieczeństwa.
 - **Obsługa tuneli** — Cloudflare, Tailscale, ngrok, OpenVPN i niestandardowe tunele do zdalnego dostępu.
 
-### Dlaczego zespoły wybierają ZeroClaw
+### Dlaczego zespoły wybierają Hrafn
 
 - **Lekki domyślnie:** mały plik binarny Rust, szybki start, niskie zużycie pamięci.
 - **Bezpieczny z założenia:** parowanie, ścisły sandboxing, jawne listy dozwolonych, izolacja workspace.
 - **W pełni wymienny:** podstawowe systemy to traity (dostawcy, kanały, narzędzia, pamięć, tunele).
 - **Brak vendor lock-in:** obsługa dostawców kompatybilnych z OpenAI + podłączalne niestandardowe endpointy.
 
-## Porównanie wydajności (ZeroClaw vs OpenClaw, odtwarzalne)
+## Porównanie wydajności (Hrafn vs OpenClaw, odtwarzalne)
 
 Szybki benchmark na maszynie lokalnej (macOS arm64, luty 2026) znormalizowany dla sprzętu edge 0.8GHz.
 
-|                           | OpenClaw      | NanoBot        | PicoClaw        | ZeroClaw 🦀          |
+|                           | OpenClaw      | NanoBot        | PicoClaw        | Hrafn 🦀          |
 | ------------------------- | ------------- | -------------- | --------------- | -------------------- |
 | **Język**                 | TypeScript    | Python         | Go              | **Rust**             |
 | **RAM**                   | > 1GB         | > 100MB        | < 10MB          | **< 5MB**            |
@@ -236,20 +236,20 @@ Szybki benchmark na maszynie lokalnej (macOS arm64, luty 2026) znormalizowany dl
 | **Rozmiar binarki**       | ~28MB (dist)  | N/A (Skrypty)  | ~8MB            | **~8.8 MB**          |
 | **Koszt**                 | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | **Dowolny sprzęt $10** |
 
-> Uwagi: Wyniki ZeroClaw są mierzone na buildach release przy użyciu `/usr/bin/time -l`. OpenClaw wymaga środowiska Node.js (typowo ~390MB dodatkowego narzutu pamięci), natomiast NanoBot wymaga środowiska Python. PicoClaw i ZeroClaw to statyczne pliki binarne. Powyższe wartości RAM dotyczą pamięci runtime; wymagania kompilacji są wyższe.
+> Uwagi: Wyniki Hrafn są mierzone na buildach release przy użyciu `/usr/bin/time -l`. OpenClaw wymaga środowiska Node.js (typowo ~390MB dodatkowego narzutu pamięci), natomiast NanoBot wymaga środowiska Python. PicoClaw i Hrafn to statyczne pliki binarne. Powyższe wartości RAM dotyczą pamięci runtime; wymagania kompilacji są wyższe.
 
 <p align="center">
-  <img src="docs/assets/zeroclaw-comparison.jpeg" alt="ZeroClaw vs OpenClaw Comparison" width="800" />
+  <img src="docs/assets/hrafn-comparison.jpeg" alt="Hrafn vs OpenClaw Comparison" width="800" />
 </p>
 
 ### Odtwarzalny pomiar lokalny
 
 ```bash
 cargo build --release
-ls -lh target/release/zeroclaw
+ls -lh target/release/hrafn
 
-/usr/bin/time -l target/release/zeroclaw --help
-/usr/bin/time -l target/release/zeroclaw status
+/usr/bin/time -l target/release/hrafn --help
+/usr/bin/time -l target/release/hrafn status
 ```
 
 ## Wszystko, co do tej pory zbudowaliśmy
@@ -325,7 +325,7 @@ Panel webowy React 19 + Vite 6 + Tailwind CSS 4 serwowany bezpośrednio z Gatewa
 
 ## Konfiguracja
 
-Minimalna `~/.zeroclaw/config.toml`:
+Minimalna `~/.hrafn/config.toml`:
 
 ```toml
 default_provider = "anthropic"
@@ -393,35 +393,35 @@ Ustaw `runtime.kind = "docker"` dla ścisłego sandboxingu lub izolacji sieciowe
 
 ## Uwierzytelnianie subskrypcyjne (OpenAI Codex / Claude Code / Gemini)
 
-ZeroClaw obsługuje natywne profile autoryzacyjne subskrypcji (wiele kont, szyfrowanie w spoczynku).
+Hrafn obsługuje natywne profile autoryzacyjne subskrypcji (wiele kont, szyfrowanie w spoczynku).
 
-- Plik przechowywania: `~/.zeroclaw/auth-profiles.json`
-- Klucz szyfrowania: `~/.zeroclaw/.secret_key`
+- Plik przechowywania: `~/.hrafn/auth-profiles.json`
+- Klucz szyfrowania: `~/.hrafn/.secret_key`
 - Format ID profilu: `<provider>:<profile_name>` (przykład: `openai-codex:work`)
 
 ```bash
 # OpenAI Codex OAuth (subskrypcja ChatGPT)
-zeroclaw auth login --provider openai-codex --device-code
+hrafn auth login --provider openai-codex --device-code
 
 # Gemini OAuth
-zeroclaw auth login --provider gemini --profile default
+hrafn auth login --provider gemini --profile default
 
 # Anthropic setup-token
-zeroclaw auth paste-token --provider anthropic --profile default --auth-kind authorization
+hrafn auth paste-token --provider anthropic --profile default --auth-kind authorization
 
 # Sprawdź / odśwież / przełącz profil
-zeroclaw auth status
-zeroclaw auth refresh --provider openai-codex --profile default
-zeroclaw auth use --provider openai-codex --profile work
+hrafn auth status
+hrafn auth refresh --provider openai-codex --profile default
+hrafn auth use --provider openai-codex --profile work
 
 # Uruchom agenta z autoryzacją subskrypcji
-zeroclaw agent --provider openai-codex -m "hello"
-zeroclaw agent --provider anthropic -m "hello"
+hrafn agent --provider openai-codex -m "hello"
+hrafn agent --provider anthropic -m "hello"
 ```
 
 ## Workspace agenta + umiejętności
 
-Katalog główny workspace: `~/.zeroclaw/workspace/` (konfigurowalne przez config).
+Katalog główny workspace: `~/.hrafn/workspace/` (konfigurowalne przez config).
 
 Wstrzykiwane pliki promptów:
 - `IDENTITY.md` — osobowość i rola agenta
@@ -430,74 +430,74 @@ Wstrzykiwane pliki promptów:
 - `AGENTS.md` — konwencje sesji i reguły inicjalizacji
 - `SOUL.md` — podstawowa tożsamość i zasady działania
 
-Umiejętności: `~/.zeroclaw/workspace/skills/<skill>/SKILL.md` lub `SKILL.toml`.
+Umiejętności: `~/.hrafn/workspace/skills/<skill>/SKILL.md` lub `SKILL.toml`.
 
 ```bash
 # Lista zainstalowanych umiejętności
-zeroclaw skills list
+hrafn skills list
 
 # Instalacja z git
-zeroclaw skills install https://github.com/user/my-skill.git
+hrafn skills install https://github.com/user/my-skill.git
 
 # Audyt bezpieczeństwa przed instalacją
-zeroclaw skills audit https://github.com/user/my-skill.git
+hrafn skills audit https://github.com/user/my-skill.git
 
 # Usuń umiejętność
-zeroclaw skills remove my-skill
+hrafn skills remove my-skill
 ```
 
 ## Komendy CLI
 
 ```bash
 # Zarządzanie workspace
-zeroclaw onboard              # Kreator konfiguracji z przewodnikiem
-zeroclaw status               # Pokaż status demona/agenta
-zeroclaw doctor               # Uruchom diagnostykę systemu
+hrafn onboard              # Kreator konfiguracji z przewodnikiem
+hrafn status               # Pokaż status demona/agenta
+hrafn doctor               # Uruchom diagnostykę systemu
 
 # Gateway + demon
-zeroclaw gateway              # Uruchom serwer gateway (127.0.0.1:42617)
-zeroclaw daemon               # Uruchom pełne autonomiczne środowisko
+hrafn gateway              # Uruchom serwer gateway (127.0.0.1:42617)
+hrafn daemon               # Uruchom pełne autonomiczne środowisko
 
 # Agent
-zeroclaw agent                # Tryb interaktywnego czatu
-zeroclaw agent -m "message"   # Tryb pojedynczej wiadomości
+hrafn agent                # Tryb interaktywnego czatu
+hrafn agent -m "message"   # Tryb pojedynczej wiadomości
 
 # Zarządzanie usługami
-zeroclaw service install      # Zainstaluj jako usługę OS (launchd/systemd)
-zeroclaw service start|stop|restart|status
+hrafn service install      # Zainstaluj jako usługę OS (launchd/systemd)
+hrafn service start|stop|restart|status
 
 # Kanały
-zeroclaw channel list         # Lista skonfigurowanych kanałów
-zeroclaw channel doctor       # Sprawdź zdrowie kanałów
-zeroclaw channel bind-telegram 123456789
+hrafn channel list         # Lista skonfigurowanych kanałów
+hrafn channel doctor       # Sprawdź zdrowie kanałów
+hrafn channel bind-telegram 123456789
 
 # Cron + planowanie
-zeroclaw cron list            # Lista zaplanowanych zadań
-zeroclaw cron add "*/5 * * * *" --prompt "Check system health"
-zeroclaw cron remove <id>
+hrafn cron list            # Lista zaplanowanych zadań
+hrafn cron add "*/5 * * * *" --prompt "Check system health"
+hrafn cron remove <id>
 
 # Pamięć
-zeroclaw memory list          # Lista wpisów pamięci
-zeroclaw memory get <key>     # Pobierz wspomnienie
-zeroclaw memory stats         # Statystyki pamięci
+hrafn memory list          # Lista wpisów pamięci
+hrafn memory get <key>     # Pobierz wspomnienie
+hrafn memory stats         # Statystyki pamięci
 
 # Profile autoryzacyjne
-zeroclaw auth login --provider <name>
-zeroclaw auth status
-zeroclaw auth use --provider <name> --profile <profile>
+hrafn auth login --provider <name>
+hrafn auth status
+hrafn auth use --provider <name> --profile <profile>
 
 # Peryferia sprzętowe
-zeroclaw hardware discover    # Skanuj podłączone urządzenia
-zeroclaw peripheral list      # Lista podłączonych peryferiów
-zeroclaw peripheral flash     # Flash firmware na urządzenie
+hrafn hardware discover    # Skanuj podłączone urządzenia
+hrafn peripheral list      # Lista podłączonych peryferiów
+hrafn peripheral flash     # Flash firmware na urządzenie
 
 # Migracja
-zeroclaw migrate openclaw --dry-run
-zeroclaw migrate openclaw
+hrafn migrate openclaw --dry-run
+hrafn migrate openclaw
 
 # Uzupełnianie powłoki
-source <(zeroclaw completions bash)
-zeroclaw completions zsh > ~/.zfunc/_zeroclaw
+source <(hrafn completions bash)
+hrafn completions zsh > ~/.zfunc/_hrafn
 ```
 
 Pełna dokumentacja komend: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md)
@@ -565,10 +565,10 @@ Pełna dokumentacja komend: [docs/reference/cli/commands-reference.md](docs/refe
 
 #### Instalator jednoliniowy
 
-Lub pomiń powyższe kroki i zainstaluj wszystko (zależności systemowe, Rust, ZeroClaw) jednym poleceniem:
+Lub pomiń powyższe kroki i zainstaluj wszystko (zależności systemowe, Rust, Hrafn) jednym poleceniem:
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -LsSf https://raw.githubusercontent.com/5queezer/hrafn/master/install.sh | bash
 ```
 
 #### Wymagania zasobów kompilacji
@@ -611,7 +611,7 @@ Zasoby wydań są publikowane dla:
 - Windows: `x86_64`
 
 Pobierz najnowsze zasoby z:
-<https://github.com/zeroclaw-labs/zeroclaw/releases/latest>
+<https://github.com/5queezer/hrafn/releases/latest>
 
 ## Dokumentacja
 
@@ -621,7 +621,7 @@ Używaj tych, gdy przeszedłeś już przez onboarding i chcesz głębszej dokume
 - Przeczytaj [przegląd architektury](docs/architecture.md), aby poznać pełny model systemu.
 - Użyj [dokumentacji konfiguracji](docs/reference/api/config-reference.md), gdy potrzebujesz każdego klucza i przykładu.
 - Uruchom Gateway zgodnie z [podręcznikiem operacyjnym](docs/ops/operations-runbook.md).
-- Postępuj zgodnie z [ZeroClaw Onboard](#szybki-start) dla konfiguracji z przewodnikiem.
+- Postępuj zgodnie z [Hrafn Onboard](#szybki-start) dla konfiguracji z przewodnikiem.
 - Debuguj typowe awarie z [przewodnikiem rozwiązywania problemów](docs/ops/troubleshooting.md).
 - Przejrzyj [wskazówki bezpieczeństwa](docs/security/README.md) przed wystawieniem czegokolwiek.
 
@@ -653,14 +653,14 @@ Używaj tych, gdy przeszedłeś już przez onboarding i chcesz głębszej dokume
 
 ## Smooth Crab 🦀
 
-ZeroClaw został zbudowany dla smooth crab 🦀, szybkiego i wydajnego asystenta AI. Stworzony przez Argenisa De La Rosę i społeczność.
+Hrafn został zbudowany dla smooth crab 🦀, szybkiego i wydajnego asystenta AI. Stworzony przez Argenisa De La Rosę i społeczność.
 
-- [zeroclawlabs.ai](https://zeroclawlabs.ai)
-- [@zeroclawlabs](https://x.com/zeroclawlabs)
+- [hrafn.ai](https://hrafn.ai)
+- [@hrafn](https://x.com/hrafn)
 
-## Wesprzyj ZeroClaw
+## Wesprzyj Hrafn
 
-Jeśli ZeroClaw pomaga w Twojej pracy i chcesz wesprzeć dalszy rozwój, możesz przekazać darowiznę tutaj:
+Jeśli Hrafn pomaga w Twojej pracy i chcesz wesprzeć dalszy rozwój, możesz przekazać darowiznę tutaj:
 
 <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=for-the-badge&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
 
@@ -677,7 +677,7 @@ Budujemy w otwartości, ponieważ najlepsze pomysły pochodzą zewsząd. Jeśli 
 
 ## Współtworzenie
 
-Nowy w ZeroClaw? Szukaj issues oznaczonych [`good first issue`](https://github.com/zeroclaw-labs/zeroclaw/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — zobacz nasz [Przewodnik kontrybutora](CONTRIBUTING.md#first-time-contributors), aby dowiedzieć się jak zacząć. PR-y z AI/vibe-coded mile widziane! 🤖
+Nowy w Hrafn? Szukaj issues oznaczonych [`good first issue`](https://github.com/5queezer/hrafn/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — zobacz nasz [Przewodnik kontrybutora](CONTRIBUTING.md#first-time-contributors), aby dowiedzieć się jak zacząć. PR-y z AI/vibe-coded mile widziane! 🤖
 
 Zobacz [CONTRIBUTING.md](CONTRIBUTING.md) i [CLA.md](docs/contributing/cla.md). Zaimplementuj trait, wyślij PR:
 
@@ -689,26 +689,26 @@ Zobacz [CONTRIBUTING.md](CONTRIBUTING.md) i [CLA.md](docs/contributing/cla.md). 
 - Nowy `Memory` → `src/memory/`
 - Nowy `Tunnel` → `src/tunnel/`
 - Nowy `Peripheral` → `src/peripherals/`
-- Nowy `Skill` → `~/.zeroclaw/workspace/skills/<name>/`
+- Nowy `Skill` → `~/.hrafn/workspace/skills/<name>/`
 
 <!-- BEGIN:RECENT_CONTRIBUTORS -->
 <!-- END:RECENT_CONTRIBUTORS -->
 
 ## ⚠️ Oficjalne repozytorium i ostrzeżenie przed podszywaniem się
 
-**To jest jedyne oficjalne repozytorium ZeroClaw:**
+**To jest jedyne oficjalne repozytorium Hrafn:**
 
-> https://github.com/zeroclaw-labs/zeroclaw
+> https://github.com/5queezer/hrafn
 
-Każde inne repozytorium, organizacja, domena lub pakiet twierdzący, że jest "ZeroClaw" lub sugerujący powiązanie z ZeroClaw Labs jest **nieautoryzowany i niepowiązany z tym projektem**. Znane nieautoryzowane forki będą wymienione w [TRADEMARK.md](docs/maintainers/trademark.md).
+Każde inne repozytorium, organizacja, domena lub pakiet twierdzący, że jest "Hrafn" lub sugerujący powiązanie z Hrafn Labs jest **nieautoryzowany i niepowiązany z tym projektem**. Znane nieautoryzowane forki będą wymienione w [TRADEMARK.md](docs/maintainers/trademark.md).
 
-Jeśli napotkasz podszywanie się lub nadużycie znaku towarowego, proszę [otwórz zgłoszenie](https://github.com/zeroclaw-labs/zeroclaw/issues).
+Jeśli napotkasz podszywanie się lub nadużycie znaku towarowego, proszę [otwórz zgłoszenie](https://github.com/5queezer/hrafn/issues).
 
 ---
 
 ## Licencja
 
-ZeroClaw jest podwójnie licencjonowany dla maksymalnej otwartości i ochrony kontrybutorów:
+Hrafn jest podwójnie licencjonowany dla maksymalnej otwartości i ochrony kontrybutorów:
 
 | Licencja | Przypadek użycia |
 |----------|------------------|
@@ -719,7 +719,7 @@ Możesz wybrać dowolną licencję. **Kontrybutorzy automatycznie udzielają pra
 
 ### Znak towarowy
 
-Nazwa **ZeroClaw** i logo są znakami towarowymi ZeroClaw Labs. Ta licencja nie udziela pozwolenia na ich używanie w celu sugerowania poparcia lub powiązania. Zobacz [TRADEMARK.md](docs/maintainers/trademark.md) po dozwolone i zabronione użycia.
+Nazwa **Hrafn** i logo są znakami towarowymi Hrafn Labs. Ta licencja nie udziela pozwolenia na ich używanie w celu sugerowania poparcia lub powiązania. Zobacz [TRADEMARK.md](docs/maintainers/trademark.md) po dozwolone i zabronione użycia.
 
 ### Ochrona kontrybutorów
 
@@ -730,12 +730,12 @@ Nazwa **ZeroClaw** i logo są znakami towarowymi ZeroClaw Labs. Ta licencja nie 
 
 ---
 
-**ZeroClaw** — Zero narzutu. Zero kompromisów. Wdrażaj wszędzie. Wymieniaj wszystko. 🦀
+**Hrafn** — Zero narzutu. Zero kompromisów. Wdrażaj wszędzie. Wymieniaj wszystko. 🦀
 
 ## Kontrybutorzy
 
-<a href="https://github.com/zeroclaw-labs/zeroclaw/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=zeroclaw-labs/zeroclaw" alt="ZeroClaw contributors" />
+<a href="https://github.com/5queezer/hrafn/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=5queezer/hrafn" alt="Hrafn contributors" />
 </a>
 
 Ta lista jest generowana z grafu kontrybutorów GitHub i aktualizuje się automatycznie.
@@ -743,11 +743,11 @@ Ta lista jest generowana z grafu kontrybutorów GitHub i aktualizuje się automa
 ## Historia gwiazdek
 
 <p align="center">
-  <a href="https://www.star-history.com/#zeroclaw-labs/zeroclaw&type=date&legend=top-left">
+  <a href="https://www.star-history.com/#5queezer/hrafn&type=date&legend=top-left">
     <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&theme=dark&legend=top-left" />
-     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&legend=top-left" />
-     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&legend=top-left" />
+     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=5queezer/hrafn&type=date&theme=dark&legend=top-left" />
+     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=5queezer/hrafn&type=date&legend=top-left" />
+     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=5queezer/hrafn&type=date&legend=top-left" />
     </picture>
   </a>
 </p>

@@ -1,6 +1,6 @@
-# ZeroClaw 命令参考文档
+# Hrafn 命令参考文档
 
-本参考文档派生自当前 CLI 界面（`zeroclaw --help`）。
+本参考文档派生自当前 CLI 界面（`hrafn --help`）。
 
 最后验证时间：**2026年3月26日**。
 
@@ -33,13 +33,13 @@
 
 ### `onboard`
 
-- `zeroclaw onboard`
-- `zeroclaw onboard --channels-only`
-- `zeroclaw onboard --force`
-- `zeroclaw onboard --reinit`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --memory <sqlite|lucid|markdown|none>`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none>`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none> --force`
+- `hrafn onboard`
+- `hrafn onboard --channels-only`
+- `hrafn onboard --force`
+- `hrafn onboard --reinit`
+- `hrafn onboard --api-key <KEY> --provider <ID> --memory <sqlite|lucid|markdown|none>`
+- `hrafn onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none>`
+- `hrafn onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none> --force`
 
 `onboard` 安全行为：
 
@@ -47,15 +47,15 @@
   - 完整引导（覆盖 `config.toml`）
   - 仅更新提供商（更新提供商/模型/API 密钥，同时保留现有渠道、隧道、内存、钩子和其他设置）
 - 在非交互式环境中，现有 `config.toml` 会导致安全拒绝，除非传递 `--force`。
-- 当你只需要轮换渠道令牌/白名单时，使用 `zeroclaw onboard --channels-only`。
-- 使用 `zeroclaw onboard --reinit` 重新开始。这会备份现有配置目录并添加时间戳后缀，然后从头创建新配置。
+- 当你只需要轮换渠道令牌/白名单时，使用 `hrafn onboard --channels-only`。
+- 使用 `hrafn onboard --reinit` 重新开始。这会备份现有配置目录并添加时间戳后缀，然后从头创建新配置。
 
 ### `agent`
 
-- `zeroclaw agent`
-- `zeroclaw agent -m \"Hello\"`
-- `zeroclaw agent --provider <ID> --model <MODEL> --temperature <0.0-2.0>`
-- `zeroclaw agent --peripheral <board:path>`
+- `hrafn agent`
+- `hrafn agent -m \"Hello\"`
+- `hrafn agent --provider <ID> --model <MODEL> --temperature <0.0-2.0>`
+- `hrafn agent --peripheral <board:path>`
 
 提示：
 
@@ -63,9 +63,9 @@
 
 ### `acp`
 
-- `zeroclaw acp`
-- `zeroclaw acp --max-sessions <N>`
-- `zeroclaw acp --session-timeout <SECONDS>`
+- `hrafn acp`
+- `hrafn acp --max-sessions <N>`
+- `hrafn acp --session-timeout <SECONDS>`
 
 启动 ACP（Agent Control Protocol）服务器，用于 IDE 和工具集成。
 
@@ -77,21 +77,21 @@
 
 ### `gateway` / `daemon`
 
-- `zeroclaw gateway [--host <HOST>] [--port <PORT>]`
-- `zeroclaw daemon [--host <HOST>] [--port <PORT>]`
+- `hrafn gateway [--host <HOST>] [--port <PORT>]`
+- `hrafn daemon [--host <HOST>] [--port <PORT>]`
 
 ### `estop`
 
-- `zeroclaw estop`（启动 `kill-all`）
-- `zeroclaw estop --level network-kill`
-- `zeroclaw estop --level domain-block --domain \"*.chase.com\" [--domain \"*.paypal.com\"]`
-- `zeroclaw estop --level tool-freeze --tool shell [--tool browser]`
-- `zeroclaw estop status`
-- `zeroclaw estop resume`
-- `zeroclaw estop resume --network`
-- `zeroclaw estop resume --domain \"*.chase.com\"`
-- `zeroclaw estop resume --tool shell`
-- `zeroclaw estop resume --otp <123456>`
+- `hrafn estop`（启动 `kill-all`）
+- `hrafn estop --level network-kill`
+- `hrafn estop --level domain-block --domain \"*.chase.com\" [--domain \"*.paypal.com\"]`
+- `hrafn estop --level tool-freeze --tool shell [--tool browser]`
+- `hrafn estop status`
+- `hrafn estop resume`
+- `hrafn estop resume --network`
+- `hrafn estop resume --domain \"*.chase.com\"`
+- `hrafn estop resume --tool shell`
+- `hrafn estop resume --otp <123456>`
 
 注意事项：
 
@@ -101,23 +101,23 @@
 
 ### `service`
 
-- `zeroclaw service install`
-- `zeroclaw service start`
-- `zeroclaw service stop`
-- `zeroclaw service restart`
-- `zeroclaw service status`
-- `zeroclaw service uninstall`
+- `hrafn service install`
+- `hrafn service start`
+- `hrafn service stop`
+- `hrafn service restart`
+- `hrafn service status`
+- `hrafn service uninstall`
 
 ### `cron`
 
-- `zeroclaw cron list`
-- `zeroclaw cron add <expr> [--tz <IANA_TZ>] <command>`
-- `zeroclaw cron add-at <rfc3339_timestamp> <command>`
-- `zeroclaw cron add-every <every_ms> <command>`
-- `zeroclaw cron once <delay> <command>`
-- `zeroclaw cron remove <id>`
-- `zeroclaw cron pause <id>`
-- `zeroclaw cron resume <id>`
+- `hrafn cron list`
+- `hrafn cron add <expr> [--tz <IANA_TZ>] <command>`
+- `hrafn cron add-at <rfc3339_timestamp> <command>`
+- `hrafn cron add-every <every_ms> <command>`
+- `hrafn cron once <delay> <command>`
+- `hrafn cron remove <id>`
+- `hrafn cron pause <id>`
+- `hrafn cron resume <id>`
 
 注意事项：
 
@@ -126,29 +126,29 @@
 
 ### `models`
 
-- `zeroclaw models refresh`
-- `zeroclaw models refresh --provider <ID>`
-- `zeroclaw models refresh --force`
+- `hrafn models refresh`
+- `hrafn models refresh --provider <ID>`
+- `hrafn models refresh --force`
 
 `models refresh` 当前支持以下提供商 ID 的实时目录刷新：`openrouter`、`openai`、`anthropic`、`groq`、`mistral`、`deepseek`、`xai`、`together-ai`、`gemini`、`ollama`、`llamacpp`、`sglang`、`vllm`、`astrai`、`venice`、`fireworks`、`cohere`、`moonshot`、`glm`、`zai`、`qwen` 和 `nvidia`。
 
 ### `doctor`
 
-- `zeroclaw doctor`
-- `zeroclaw doctor models [--provider <ID>] [--use-cache]`
-- `zeroclaw doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]`
-- `zeroclaw doctor traces --id <TRACE_ID>`
+- `hrafn doctor`
+- `hrafn doctor models [--provider <ID>] [--use-cache]`
+- `hrafn doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]`
+- `hrafn doctor traces --id <TRACE_ID>`
 
 `doctor traces` 从 `observability.runtime_trace_path` 读取运行时工具/模型诊断信息。
 
 ### `channel`
 
-- `zeroclaw channel list`
-- `zeroclaw channel start`
-- `zeroclaw channel doctor`
-- `zeroclaw channel bind-telegram <IDENTITY>`
-- `zeroclaw channel add <type> <json>`
-- `zeroclaw channel remove <name>`
+- `hrafn channel list`
+- `hrafn channel start`
+- `hrafn channel doctor`
+- `hrafn channel bind-telegram <IDENTITY>`
+- `hrafn channel add <type> <json>`
+- `hrafn channel remove <name>`
 
 运行时聊天内命令（渠道服务器运行时的 Telegram/Discord）：
 
@@ -169,14 +169,14 @@
 
 ### `integrations`
 
-- `zeroclaw integrations info <name>`
+- `hrafn integrations info <name>`
 
 ### `skills`
 
-- `zeroclaw skills list`
-- `zeroclaw skills audit <source_or_name>`
-- `zeroclaw skills install <source>`
-- `zeroclaw skills remove <name>`
+- `hrafn skills list`
+- `hrafn skills audit <source_or_name>`
+- `hrafn skills install <source>`
+- `hrafn skills remove <name>`
 
 `<source>` 接受 git 远程地址（`https://...`、`http://...`、`ssh://...` 和 `git@host:owner/repo.git`）或本地文件系统路径。
 
@@ -192,43 +192,43 @@
 
 ### `migrate`
 
-- `zeroclaw migrate openclaw [--source <path>] [--dry-run]`
+- `hrafn migrate openclaw [--source <path>] [--dry-run]`
 
 ### `config`
 
-- `zeroclaw config schema`
+- `hrafn config schema`
 
 `config schema` 将完整 `config.toml` 契约的 JSON Schema（草案 2020-12）打印到 stdout。
 
 ### `completions`
 
-- `zeroclaw completions bash`
-- `zeroclaw completions fish`
-- `zeroclaw completions zsh`
-- `zeroclaw completions powershell`
-- `zeroclaw completions elvish`
+- `hrafn completions bash`
+- `hrafn completions fish`
+- `hrafn completions zsh`
+- `hrafn completions powershell`
+- `hrafn completions elvish`
 
 `completions` 设计为仅输出到 stdout，因此脚本可以直接被 source 而不会被日志/警告污染。
 
 ### `hardware`
 
-- `zeroclaw hardware discover`
-- `zeroclaw hardware introspect <path>`
-- `zeroclaw hardware info [--chip <chip_name>]`
+- `hrafn hardware discover`
+- `hrafn hardware introspect <path>`
+- `hrafn hardware info [--chip <chip_name>]`
 
 ### `peripheral`
 
-- `zeroclaw peripheral list`
-- `zeroclaw peripheral add <board> <path>`
-- `zeroclaw peripheral flash [--port <serial_port>]`
-- `zeroclaw peripheral setup-uno-q [--host <ip_or_host>]`
-- `zeroclaw peripheral flash-nucleo`
+- `hrafn peripheral list`
+- `hrafn peripheral add <board> <path>`
+- `hrafn peripheral flash [--port <serial_port>]`
+- `hrafn peripheral setup-uno-q [--host <ip_or_host>]`
+- `hrafn peripheral flash-nucleo`
 
 ## 验证提示
 
 要快速针对当前二进制文件验证文档：
 
 ```bash
-zeroclaw --help
-zeroclaw <command> --help
+hrafn --help
+hrafn <command> --help
 ```
