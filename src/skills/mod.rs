@@ -1679,7 +1679,7 @@ pub fn handle_command(command: crate::SkillCommands, config: &crate::config::Con
                     "    {} {} ({})",
                     console::style("·").dim(),
                     name,
-                    &entry.sha256[..12]
+                    entry.sha256.get(..12).unwrap_or(&entry.sha256)
                 );
             }
             Ok(())
