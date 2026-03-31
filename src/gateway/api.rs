@@ -339,7 +339,13 @@ pub async fn handle_api_cron_add(
         };
 
         crate::cron::add_shell_job_with_approval_caller(
-            &config, name, schedule, command, delivery, false, Some("api"),
+            &config,
+            name,
+            schedule,
+            command,
+            delivery,
+            false,
+            Some("api"),
         )
     };
 

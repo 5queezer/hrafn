@@ -889,10 +889,18 @@ mod tests {
 
     #[test]
     fn uses_persistence_command_detects_after_operator() {
-        assert!(ShellTool::uses_persistence_command("echo hi && nohup ./server.sh"));
-        assert!(ShellTool::uses_persistence_command("echo hi || screen -d -m ./run"));
-        assert!(ShellTool::uses_persistence_command("echo hi ; tmux new-session -d"));
-        assert!(ShellTool::uses_persistence_command("cat file | nohup tee out"));
+        assert!(ShellTool::uses_persistence_command(
+            "echo hi && nohup ./server.sh"
+        ));
+        assert!(ShellTool::uses_persistence_command(
+            "echo hi || screen -d -m ./run"
+        ));
+        assert!(ShellTool::uses_persistence_command(
+            "echo hi ; tmux new-session -d"
+        ));
+        assert!(ShellTool::uses_persistence_command(
+            "cat file | nohup tee out"
+        ));
     }
 
     #[test]
@@ -904,10 +912,16 @@ mod tests {
 
     #[test]
     fn uses_persistence_command_ignores_arguments() {
-        assert!(!ShellTool::uses_persistence_command("echo \"connect to tmux\""));
+        assert!(!ShellTool::uses_persistence_command(
+            "echo \"connect to tmux\""
+        ));
         assert!(!ShellTool::uses_persistence_command("echo screen"));
-        assert!(!ShellTool::uses_persistence_command("grep nohup logfile.txt"));
-        assert!(!ShellTool::uses_persistence_command("ls -la /usr/bin/nohup"));
+        assert!(!ShellTool::uses_persistence_command(
+            "grep nohup logfile.txt"
+        ));
+        assert!(!ShellTool::uses_persistence_command(
+            "ls -la /usr/bin/nohup"
+        ));
     }
 
     #[tokio::test]

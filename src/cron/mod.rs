@@ -91,9 +91,7 @@ pub fn add_shell_job_with_approval(
     delivery: Option<DeliveryConfig>,
     approved: bool,
 ) -> Result<CronJob> {
-    add_shell_job_with_approval_caller(
-        config, name, schedule, command, delivery, approved, None,
-    )
+    add_shell_job_with_approval_caller(config, name, schedule, command, delivery, approved, None)
 }
 
 /// Create a validated shell job with caller metadata for quarantine tracking.
