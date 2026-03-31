@@ -802,6 +802,8 @@ mod tests {
             delete_after_run: false,
             allowed_tools: None,
             source: "imperative".into(),
+            created_by: None,
+            pending_approval: false,
             created_at: Utc::now(),
             next_run: Utc::now(),
             last_run: None,

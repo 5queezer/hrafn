@@ -14,7 +14,8 @@ pub use schedule::{
 };
 #[allow(unused_imports)]
 pub use store::{
-    add_agent_job, all_overdue_jobs, due_jobs, get_job, list_jobs, list_runs, record_last_run,
+    add_agent_job, add_agent_job_with_caller, add_shell_job_with_caller, all_overdue_jobs,
+    approve_job, due_jobs, get_job, list_jobs, list_pending_jobs, list_runs, record_last_run,
     record_run, remove_job, reschedule_after_run, sync_declarative_jobs, update_job,
 };
 pub use types::{
@@ -1026,5 +1027,86 @@ mod tests {
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].job_type, JobType::Shell);
         assert_eq!(jobs[0].command, "echo ok");
+    }
+
+    // ── Cron ownership tests ────────────────────────────────
+
+    #[test]
+    fn pending_approval_job_not_in_due_jobs() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        // Use Every schedule (always valid)
+        let schedule = Schedule::Every { every_ms: 60_000 };
+
+        store::add_shell_job_with_caller(
+            &config,
+            Some("pending".into()),
+            schedule,
+            "echo pending",
+            None,
+            Some("non-owner-user".into()),
+            true,
+        )
+        .unwrap();
+
+        // Query far enough in the future to catch any due jobs
+        let future = chrono::Utc::now() + chrono::Duration::hours(1);
+        let due = store::due_jobs(&config, future).unwrap();
+        assert!(
+            due.is_empty(),
+            "pending-approval jobs must not appear in due_jobs"
+        );
+
+        let pending = store::list_pending_jobs(&config).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].created_by.as_deref(), Some("non-owner-user"));
+        assert!(pending[0].pending_approval);
+    }
+
+    #[test]
+    fn approve_job_makes_it_eligible() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let schedule = Schedule::Every { every_ms: 60_000 };
+
+        let job = store::add_shell_job_with_caller(
+            &config,
+            None,
+            schedule,
+            "echo approved",
+            None,
+            Some("non-owner".into()),
+            true,
+        )
+        .unwrap();
+
+        // Before approval: not due
+        let future = chrono::Utc::now() + chrono::Duration::hours(1);
+        let due = store::due_jobs(&config, future).unwrap();
+        assert!(due.is_empty());
+
+        // Approve
+        store::approve_job(&config, &job.id).unwrap();
+
+        // After approval: now due
+        let due = store::due_jobs(&config, future).unwrap();
+        assert_eq!(due.len(), 1);
+        assert!(!due[0].pending_approval);
+    }
+
+    #[test]
+    fn owner_job_has_no_pending_approval() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let schedule = Schedule::Every { every_ms: 60_000 };
+
+        store::add_shell_job_with_caller(&config, None, schedule, "echo owner", None, None, false)
+            .unwrap();
+
+        let future = chrono::Utc::now() + chrono::Duration::hours(1);
+        let due = store::due_jobs(&config, future).unwrap();
+        assert_eq!(due.len(), 1);
+        assert!(!due[0].pending_approval);
+        assert!(due[0].created_by.is_none());
     }
 }
