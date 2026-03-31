@@ -95,11 +95,20 @@ impl ShellTool {
     /// Check whether a command uses a persistence wrapper (nohup, setsid, etc.)
     /// that would create a background-persistent process.
     fn uses_persistence_command(command: &str) -> bool {
+        // Only check command positions: the first token and any token immediately
+        // after a shell operator (&&, ||, ;, |). This avoids false positives from
+        // persistence keywords appearing as arguments (e.g. `echo "connect to tmux"`)
+        // and catches bypass attempts via quoted wrappers (e.g. `"nohup" cmd`).
+        let mut check_next = true;
         for word in command.split_whitespace() {
-            let base = word.rsplit('/').next().unwrap_or(word);
-            if PERSISTENCE_COMMANDS.contains(&base) {
-                return true;
+            if check_next {
+                let clean = word.trim_matches(|c: char| c == '"' || c == '\'' || c == '\\');
+                let base = clean.rsplit('/').next().unwrap_or(clean);
+                if PERSISTENCE_COMMANDS.contains(&base) {
+                    return true;
+                }
             }
+            check_next = matches!(word, "&&" | "||" | ";" | "|");
         }
         false
     }
@@ -873,10 +882,32 @@ mod tests {
     }
 
     #[test]
+    fn uses_persistence_command_detects_quoted_wrapper() {
+        assert!(ShellTool::uses_persistence_command("\"nohup\" ./server.sh"));
+        assert!(ShellTool::uses_persistence_command("'tmux' new-session -d"));
+    }
+
+    #[test]
+    fn uses_persistence_command_detects_after_operator() {
+        assert!(ShellTool::uses_persistence_command("echo hi && nohup ./server.sh"));
+        assert!(ShellTool::uses_persistence_command("echo hi || screen -d -m ./run"));
+        assert!(ShellTool::uses_persistence_command("echo hi ; tmux new-session -d"));
+        assert!(ShellTool::uses_persistence_command("cat file | nohup tee out"));
+    }
+
+    #[test]
     fn uses_persistence_command_ignores_normal_commands() {
         assert!(!ShellTool::uses_persistence_command("echo hello"));
         assert!(!ShellTool::uses_persistence_command("ls -la"));
         assert!(!ShellTool::uses_persistence_command("cargo build"));
+    }
+
+    #[test]
+    fn uses_persistence_command_ignores_arguments() {
+        assert!(!ShellTool::uses_persistence_command("echo \"connect to tmux\""));
+        assert!(!ShellTool::uses_persistence_command("echo screen"));
+        assert!(!ShellTool::uses_persistence_command("grep nohup logfile.txt"));
+        assert!(!ShellTool::uses_persistence_command("ls -la /usr/bin/nohup"));
     }
 
     #[tokio::test]

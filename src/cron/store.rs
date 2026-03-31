@@ -96,7 +96,9 @@ pub fn add_agent_job(
     delivery: Option<DeliveryConfig>,
     delete_after_run: bool,
     allowed_tools: Option<Vec<String>>,
+    caller: Option<&str>,
 ) -> Result<CronJob> {
+    let pending = caller.is_some() && caller != Some("owner");
     add_agent_job_with_caller(
         config,
         name,
@@ -107,8 +109,8 @@ pub fn add_agent_job(
         delivery,
         delete_after_run,
         allowed_tools,
-        None,
-        false,
+        caller.map(String::from),
+        pending,
     )
 }
 
@@ -1137,6 +1139,7 @@ mod tests {
             }),
             false,
             None,
+            None,
         )
         .unwrap_err();
 
@@ -1279,6 +1282,7 @@ mod tests {
             None,
             false,
             Some(vec!["file_read".into(), "web_search".into()]),
+            None,
         )
         .unwrap();
 
@@ -1305,6 +1309,7 @@ mod tests {
             None,
             None,
             false,
+            None,
             None,
         )
         .unwrap();

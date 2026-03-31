@@ -91,9 +91,38 @@ pub fn add_shell_job_with_approval(
     delivery: Option<DeliveryConfig>,
     approved: bool,
 ) -> Result<CronJob> {
+    add_shell_job_with_approval_caller(
+        config, name, schedule, command, delivery, approved, None,
+    )
+}
+
+/// Create a validated shell job with caller metadata for quarantine tracking.
+///
+/// When `caller` is `Some(id)` and the caller is not the owner, the job is
+/// created with `pending_approval = true` so it must be explicitly approved
+/// before the scheduler will execute it.
+#[allow(clippy::too_many_arguments)]
+pub fn add_shell_job_with_approval_caller(
+    config: &Config,
+    name: Option<String>,
+    schedule: Schedule,
+    command: &str,
+    delivery: Option<DeliveryConfig>,
+    approved: bool,
+    caller: Option<&str>,
+) -> Result<CronJob> {
     validate_shell_command(config, command, approved)?;
     validate_delivery_config(delivery.as_ref())?;
-    store::add_shell_job(config, name, schedule, command, delivery)
+    let pending = caller.is_some() && caller != Some("owner");
+    store::add_shell_job_with_caller(
+        config,
+        name,
+        schedule,
+        command,
+        delivery,
+        caller.map(String::from),
+        pending,
+    )
 }
 
 /// Update a shell job's command with security validation.
@@ -214,6 +243,7 @@ pub fn handle_command(command: crate::CronCommands, config: &Config) -> Result<(
                     } else {
                         Some(allowed_tools)
                     },
+                    None,
                 )?;
                 println!("✅ Added agent cron job {}", job.id);
                 println!("  Expr  : {}", job.expression);
@@ -256,6 +286,7 @@ pub fn handle_command(command: crate::CronCommands, config: &Config) -> Result<(
                     } else {
                         Some(allowed_tools)
                     },
+                    None,
                 )?;
                 println!("✅ Added one-shot agent cron job {}", job.id);
                 println!("  At    : {}", job.next_run.to_rfc3339());
@@ -293,6 +324,7 @@ pub fn handle_command(command: crate::CronCommands, config: &Config) -> Result<(
                     } else {
                         Some(allowed_tools)
                     },
+                    None,
                 )?;
                 println!("✅ Added interval agent cron job {}", job.id);
                 println!("  Every(ms): {every_ms}");
@@ -334,6 +366,7 @@ pub fn handle_command(command: crate::CronCommands, config: &Config) -> Result<(
                     } else {
                         Some(allowed_tools)
                     },
+                    None,
                 )?;
                 println!("✅ Added one-shot agent cron job {}", job.id);
                 println!("  At    : {}", job.next_run.to_rfc3339());
@@ -985,6 +1018,7 @@ mod tests {
             None,
             None,
             false,
+            None,
             None,
         )
         .unwrap();

@@ -1126,6 +1126,7 @@ mod tests {
             None,
             true,
             None,
+            None,
         )
         .unwrap();
         let started = Utc::now();
@@ -1151,6 +1152,7 @@ mod tests {
             None,
             None,
             true,
+            None,
             None,
         )
         .unwrap();
@@ -1219,6 +1221,7 @@ mod tests {
             }),
             false,
             None,
+            None,
         )
         .unwrap();
         let started = Utc::now();
@@ -1258,6 +1261,7 @@ mod tests {
             }),
             false,
             None,
+            None,
         )
         .unwrap();
         let started = Utc::now();
@@ -1289,6 +1293,7 @@ mod tests {
             None,
             None,
             false,
+            None,
             None,
         )
         .unwrap();
