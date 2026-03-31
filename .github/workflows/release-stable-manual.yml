@@ -609,15 +609,8 @@ jobs:
       dry_run: false
     secrets: inherit
 
-  # ── Post-publish: sync marketplace templates (Coolify, Dokploy, EasyPanel) ──
-  marketplace:
-    name: Sync Marketplace Templates
-    needs: [validate, docker]
-    if: ${{ !cancelled() && needs.docker.result == 'success' }}
-    uses: ./.github/workflows/sync-marketplace-templates.yml
-    with:
-      release_tag: ${{ needs.validate.outputs.tag }}
-    secrets: inherit
+  # ── Marketplace template sync removed — reusable workflow does not exist yet ──
+  # Re-add when .github/workflows/sync-marketplace-templates.yml is created.
 
   # ── Post-publish: announce after release + website are live ───────────
   # Docker push can be slow; don't let it block announcements.

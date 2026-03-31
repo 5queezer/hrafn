@@ -486,12 +486,5 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta-debian
           platforms: linux/amd64,linux/arm64
 
-  # ── Post-publish: sync marketplace templates (Coolify, Dokploy, EasyPanel) ──
-  marketplace:
-    name: Sync Marketplace Templates
-    needs: [version, docker]
-    if: ${{ !cancelled() && needs.docker.result == 'success' }}
-    uses: ./.github/workflows/sync-marketplace-templates.yml
-    with:
-      release_tag: ${{ needs.version.outputs.tag }}
-    secrets: inherit
+  # ── Marketplace template sync removed — reusable workflow does not exist yet ──
+  # Re-add when .github/workflows/sync-marketplace-templates.yml is created.
