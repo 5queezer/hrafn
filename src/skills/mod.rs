@@ -235,15 +235,12 @@ pub fn load_skills_from_directory(skills_dir: &Path, allow_scripts: bool) -> Vec
             match integrity::verify_skill(&lockfile, skill_name, &manifest_file) {
                 Ok(integrity::VerifyResult::Ok) => {}
                 Ok(integrity::VerifyResult::NotLocked) => {
+                    // Warn but still load — refusing unlocked skills would break
+                    // existing setups when the first skill is installed with a lockfile.
                     tracing::warn!(
                         "skill '{}' is not present in skills.lock — run `hrafn skills lock` to add it",
                         skill_name,
                     );
-                    eprintln!(
-                        "warning: skill '{}' skipped: not present in skills.lock (run `hrafn skills lock`)",
-                        skill_name,
-                    );
-                    continue;
                 }
                 Ok(integrity::VerifyResult::Mismatch { expected, actual }) => {
                     tracing::warn!(
@@ -255,8 +252,8 @@ pub fn load_skills_from_directory(skills_dir: &Path, allow_scripts: bool) -> Vec
                         "warning: skill '{}' skipped: integrity mismatch (expected {}, got {}). \
                          Review the skill and run `hrafn skills lock` to update.",
                         skill_name,
-                        &expected[..12],
-                        &actual[..std::cmp::min(12, actual.len())],
+                        expected.get(..12).unwrap_or(&expected),
+                        actual.get(..12).unwrap_or(&actual),
                     );
                     continue;
                 }
@@ -297,6 +294,8 @@ fn load_open_skills_from_directory(skills_dir: &Path, allow_scripts: bool) -> Ve
         return Vec::new();
     }
 
+    let lockfile = integrity::read_lockfile(skills_dir).unwrap_or_default();
+
     let mut skills = Vec::new();
 
     let Ok(entries) = std::fs::read_dir(skills_dir) else {
@@ -331,14 +330,57 @@ fn load_open_skills_from_directory(skills_dir: &Path, allow_scripts: bool) -> Ve
         let manifest_path = path.join("SKILL.toml");
         let md_path = path.join("SKILL.md");
 
-        if manifest_path.exists() {
-            if let Ok(skill) = load_skill_toml(&manifest_path) {
+        let (manifest_file, is_toml) = if manifest_path.exists() {
+            (manifest_path, true)
+        } else if md_path.exists() {
+            (md_path, false)
+        } else {
+            continue;
+        };
+
+        // Verify integrity against lockfile when one exists
+        let skill_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        if !lockfile.skills.is_empty() {
+            match integrity::verify_skill(&lockfile, skill_name, &manifest_file) {
+                Ok(integrity::VerifyResult::Ok) => {}
+                Ok(integrity::VerifyResult::NotLocked) => {
+                    tracing::warn!(
+                        "open-skill '{}' is not present in skills.lock",
+                        skill_name,
+                    );
+                }
+                Ok(integrity::VerifyResult::Mismatch { expected, actual }) => {
+                    tracing::warn!(
+                        "open-skill '{}' failed integrity check: expected SHA-256 {}, got {}",
+                        skill_name, expected, actual,
+                    );
+                    eprintln!(
+                        "warning: open-skill '{}' skipped: integrity mismatch (expected {}, got {}).",
+                        skill_name,
+                        expected.get(..12).unwrap_or(&expected),
+                        actual.get(..12).unwrap_or(&actual),
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "open-skill '{}' integrity check failed: {err}",
+                        skill_name,
+                    );
+                    continue;
+                }
+            }
+        }
+
+        if is_toml {
+            if let Ok(skill) = load_skill_toml(&manifest_file) {
                 skills.push(finalize_open_skill(skill));
             }
-        } else if md_path.exists() {
-            if let Ok(skill) = load_open_skill_md(&md_path) {
-                skills.push(skill);
-            }
+        } else if let Ok(skill) = load_open_skill_md(&manifest_file) {
+            skills.push(skill);
         }
     }
 
@@ -1676,8 +1718,8 @@ pub fn handle_command(command: crate::SkillCommands, config: &crate::config::Con
                             "  {} {} — integrity mismatch (expected {}, got {})",
                             console::style("✗").red().bold(),
                             name,
-                            &expected[..12],
-                            &actual[..std::cmp::min(12, actual.len())],
+                            expected.get(..12).unwrap_or(expected),
+                            actual.get(..12).unwrap_or(actual),
                         );
                     }
                 }
