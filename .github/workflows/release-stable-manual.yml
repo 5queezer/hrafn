@@ -609,11 +609,20 @@ jobs:
       dry_run: false
     secrets: inherit
 
-  # ── Post-publish: sync marketplace templates (Coolify, Dokploy, EasyPanel) ──
+  check-marketplace-secret:
+    name: Check Marketplace Token
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - id: check
+        run: echo "available=${{ secrets.MARKETPLACE_PAT != '' }}" >> "$GITHUB_OUTPUT"
+
   marketplace:
     name: Sync Marketplace Templates
-    needs: [validate, docker]
-    if: ${{ !cancelled() && needs.docker.result == 'success' }}
+    needs: [validate, publish, check-marketplace-secret]
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.check-marketplace-secret.outputs.available == 'true' }}
     uses: ./.github/workflows/sync-marketplace-templates.yml
     with:
       release_tag: ${{ needs.validate.outputs.tag }}

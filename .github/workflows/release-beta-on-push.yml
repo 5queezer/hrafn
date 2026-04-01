@@ -487,11 +487,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta-debian
           platforms: linux/amd64,linux/arm64
 
-  # ── Post-publish: sync marketplace templates (Coolify, Dokploy, EasyPanel) ──
+  # ── Post-publish: marketplace template sync ──────────────────────────
+  check-marketplace-secret:
+    name: Check Marketplace Token
+    needs: [publish]
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - id: check
+        run: echo "available=${{ secrets.MARKETPLACE_PAT != '' }}" >> "$GITHUB_OUTPUT"
+
   marketplace:
     name: Sync Marketplace Templates
-    needs: [version, docker]
-    if: ${{ !cancelled() && needs.docker.result == 'success' }}
+    needs: [version, publish, check-marketplace-secret]
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.check-marketplace-secret.outputs.available == 'true' }}
     uses: ./.github/workflows/sync-marketplace-templates.yml
     with:
       release_tag: ${{ needs.version.outputs.tag }}
