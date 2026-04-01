@@ -119,8 +119,11 @@ impl A2aTool {
         bearer_token: Option<&str>,
         message: &str,
     ) -> anyhow::Result<ToolResult> {
-        let base = self.validate_url(url)?;
-        let send_url = base.join("/message:send")?;
+        let mut send_url = self.validate_url(url)?;
+        send_url
+            .path_segments_mut()
+            .map_err(|()| anyhow::anyhow!("URL cannot be a base"))?
+            .push("message:send");
         let client = self.build_client()?;
 
         let body = json!({
@@ -161,8 +164,12 @@ impl A2aTool {
         bearer_token: Option<&str>,
         task_id: &str,
     ) -> anyhow::Result<serde_json::Value> {
-        let base = self.validate_url(url)?;
-        let task_url = base.join(&format!("/tasks/{task_id}"))?;
+        let mut task_url = self.validate_url(url)?;
+        task_url
+            .path_segments_mut()
+            .map_err(|()| anyhow::anyhow!("URL cannot be a base"))?
+            .push("tasks")
+            .push(task_id);
         let client = self.build_client()?;
 
         let mut req = client.get(task_url);

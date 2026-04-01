@@ -163,7 +163,11 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
         .clone()
         .unwrap_or_else(|| "https://github.com/5queezer/hrafn".to_string());
 
-    json!({
+    // Only advertise security requirements when auth is actually configured
+    let requires_auth =
+        a2a.bearer_token.as_ref().is_some_and(|t| !t.is_empty()) || config.gateway.require_pairing;
+
+    let mut card = json!({
         "name": name,
         "description": description,
         "version": version,
@@ -182,20 +186,25 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
         "provider": {
             "organization": "ZeroClaw",
             "url": provider_url
-        },
-        "security_schemes": {
+        }
+    });
+
+    if requires_auth {
+        card["security_schemes"] = json!({
             "bearer": {
                 "http_auth_security_scheme": {
                     "scheme": "Bearer"
                 }
             }
-        },
-        "security_requirements": [{
+        });
+        card["security_requirements"] = json!([{
             "schemes": {
                 "bearer": { "list": [] }
             }
-        }]
-    })
+        }]);
+    }
+
+    card
 }
 
 // ── Handlers ─────────────────────────────────────────────────────
@@ -488,6 +497,50 @@ async fn handle_tasks_get(
 
 // ── v1.0 REST-style endpoint handlers ───────────────────────
 
+/// Unwrap a JSON-RPC response into a REST response.
+/// Returns the `result` payload on success, or maps JSON-RPC error codes
+/// to appropriate HTTP status codes.
+fn unwrap_rpc_to_rest(
+    rpc_status: StatusCode,
+    rpc_body: serde_json::Value,
+) -> (StatusCode, Json<serde_json::Value>) {
+    // Propagate non-OK HTTP status directly (auth errors, 503, etc.)
+    if rpc_status != StatusCode::OK {
+        return (rpc_status, Json(rpc_body));
+    }
+
+    // If there's a result, return it directly
+    if let Some(result) = rpc_body.get("result").cloned() {
+        return (StatusCode::OK, Json(result));
+    }
+
+    // Translate JSON-RPC error codes to HTTP status codes
+    if let Some(error) = rpc_body.get("error") {
+        let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-32000);
+        let http_status = match code {
+            -32600 => StatusCode::BAD_REQUEST,      // Invalid request
+            -32601 => StatusCode::NOT_FOUND,        // Method not found
+            -32602 => StatusCode::BAD_REQUEST,      // Invalid params
+            -32001 => StatusCode::NOT_FOUND,        // Task not found
+            _ => StatusCode::INTERNAL_SERVER_ERROR, // Server errors
+        };
+        return (
+            http_status,
+            Json(json!({
+                "error": {
+                    "code": code,
+                    "message": error.get("message").cloned().unwrap_or(json!("Unknown error"))
+                }
+            })),
+        );
+    }
+
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"error": {"message": "Unexpected response format"}})),
+    )
+}
+
 /// `POST /message:send` — v1.0 REST binding for SendMessage.
 pub async fn handle_message_send_rest(
     State(state): State<AppState>,
@@ -506,16 +559,14 @@ pub async fn handle_message_send_rest(
         return resp.into_response();
     }
 
-    // Wrap in JSON-RPC envelope for the shared handler
     let req = JsonRpcRequest {
         jsonrpc: "2.0".into(),
         id: json!(uuid::Uuid::new_v4().to_string()),
         method: "message/send".into(),
         params,
     };
-    Box::pin(handle_message_send(&state, task_store, req))
-        .await
-        .into_response()
+    let (status, Json(body)) = Box::pin(handle_message_send(&state, task_store, req)).await;
+    unwrap_rpc_to_rest(status, body).into_response()
 }
 
 /// `GET /tasks/{id}` — v1.0 REST binding for GetTask.
@@ -542,7 +593,8 @@ pub async fn handle_tasks_get_rest(
         method: "tasks/get".into(),
         params: json!({"id": task_id}),
     };
-    handle_tasks_get(task_store, req).await.into_response()
+    let (status, Json(body)) = handle_tasks_get(task_store, req).await;
+    unwrap_rpc_to_rest(status, body).into_response()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

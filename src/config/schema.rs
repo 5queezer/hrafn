@@ -10100,6 +10100,24 @@ impl Config {
         self.proxy.validate()?;
         self.cloud_ops.validate()?;
 
+        // A2A
+        if let Some(ref pv) = self.a2a.protocol_version {
+            if pv.trim().is_empty() {
+                anyhow::bail!("a2a.protocol_version must not be empty when set");
+            }
+        }
+        if let Some(ref pu) = self.a2a.provider_url {
+            let trimmed = pu.trim();
+            if trimmed.is_empty() {
+                anyhow::bail!("a2a.provider_url must not be empty when set");
+            }
+            let parsed = reqwest::Url::parse(trimmed)
+                .map_err(|e| anyhow::anyhow!("a2a.provider_url is not a valid URL: {e}"))?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                anyhow::bail!("a2a.provider_url must use http or https scheme");
+            }
+        }
+
         // Notion
         if self.notion.enabled {
             if self.notion.database_id.trim().is_empty() {
