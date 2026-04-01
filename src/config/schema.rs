@@ -3799,6 +3799,12 @@ pub struct A2aConfig {
     /// Protocol version advertised in the agent card (defaults to crate version).
     #[serde(default)]
     pub version: Option<String>,
+    /// A2A protocol version for `supported_interfaces` (defaults to "1.0").
+    #[serde(default)]
+    pub protocol_version: Option<String>,
+    /// Provider URL for the agent card (defaults to project repository URL).
+    #[serde(default)]
+    pub provider_url: Option<String>,
     /// Capability tags advertised in the agent card skills list.
     #[serde(default)]
     pub capabilities: Vec<String>,
@@ -3817,6 +3823,8 @@ impl std::fmt::Debug for A2aConfig {
             .field("public_url", &self.public_url)
             .field("bearer_token", &self.bearer_token.as_ref().map(|_| "***"))
             .field("version", &self.version)
+            .field("protocol_version", &self.protocol_version)
+            .field("provider_url", &self.provider_url)
             .field("capabilities", &self.capabilities)
             .field("notify_chat_id", &self.notify_chat_id)
             .finish()

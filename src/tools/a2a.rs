@@ -120,24 +120,18 @@ impl A2aTool {
         message: &str,
     ) -> anyhow::Result<ToolResult> {
         let base = self.validate_url(url)?;
-        let rpc_url = base.join("/a2a")?;
+        let send_url = base.join("/message:send")?;
         let client = self.build_client()?;
-        let request_id = uuid::Uuid::new_v4().to_string();
 
         let body = json!({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": "message/send",
-            "params": {
-                "message": {
-                    "role": "user",
-                    "parts": [{ "kind": "text", "text": message }],
-                    "messageId": uuid::Uuid::new_v4().to_string()
-                }
+            "message": {
+                "role": "ROLE_USER",
+                "parts": [{ "text": message }],
+                "messageId": uuid::Uuid::new_v4().to_string()
             }
         });
 
-        let mut req = client.post(rpc_url).json(&body);
+        let mut req = client.post(send_url).json(&body);
         if let Some(token) = bearer_token {
             req = req.bearer_auth(token);
         }
@@ -168,18 +162,10 @@ impl A2aTool {
         task_id: &str,
     ) -> anyhow::Result<serde_json::Value> {
         let base = self.validate_url(url)?;
-        let rpc_url = base.join("/a2a")?;
+        let task_url = base.join(&format!("/tasks/{task_id}"))?;
         let client = self.build_client()?;
-        let request_id = uuid::Uuid::new_v4().to_string();
 
-        let body = json!({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": "tasks/get",
-            "params": { "id": task_id }
-        });
-
-        let mut req = client.post(rpc_url).json(&body);
+        let mut req = client.get(task_url);
         if let Some(token) = bearer_token {
             req = req.bearer_auth(token);
         }
@@ -644,20 +630,15 @@ mod tests {
     ) -> anyhow::Result<ToolResult> {
         let client = tool.build_client()?;
         let parsed = reqwest::Url::parse(url)?;
-        let rpc_url = parsed.join("/a2a")?;
+        let send_url = parsed.join("/message:send")?;
         let body = json!({
-            "jsonrpc": "2.0",
-            "id": uuid::Uuid::new_v4().to_string(),
-            "method": "message/send",
-            "params": {
-                "message": {
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": message}],
-                    "messageId": uuid::Uuid::new_v4().to_string()
-                }
+            "message": {
+                "role": "ROLE_USER",
+                "parts": [{"text": message}],
+                "messageId": uuid::Uuid::new_v4().to_string()
             }
         });
-        let mut req = client.post(rpc_url).json(&body);
+        let mut req = client.post(send_url).json(&body);
         if let Some(token) = bearer {
             req = req.bearer_auth(token);
         }
@@ -734,13 +715,13 @@ mod tests {
             "id": "test",
             "result": {
                 "id": "task-1",
-                "status": {"state": "completed"},
-                "artifacts": [{"parts": [{"kind": "text", "text": "response"}]}]
+                "status": {"state": "TASK_STATE_COMPLETED"},
+                "artifacts": [{"parts": [{"text": "response"}]}]
             }
         });
 
         Mock::given(method("POST"))
-            .and(path("/a2a"))
+            .and(path("/message:send"))
             .respond_with(ResponseTemplate::new(200).set_body_json(&rpc_response))
             .mount(&server)
             .await;
@@ -751,7 +732,7 @@ mod tests {
             .unwrap();
         assert!(result.success);
         let parsed: serde_json::Value = serde_json::from_str(&result.output).unwrap();
-        assert_eq!(parsed["result"]["status"]["state"], "completed");
+        assert_eq!(parsed["result"]["status"]["state"], "TASK_STATE_COMPLETED");
     }
 
     #[tokio::test]
@@ -762,7 +743,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path("/a2a"))
+            .and(path("/message:send"))
             .and(header("Authorization", "Bearer my-token"))
             .respond_with(
                 ResponseTemplate::new(200)
@@ -786,7 +767,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path("/a2a"))
+            .and(path("/message:send"))
             .respond_with(
                 ResponseTemplate::new(401).set_body_json(json!({"error": "Unauthorized"})),
             )
