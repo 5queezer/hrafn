@@ -36,7 +36,7 @@ const MAX_TASKS: usize = 10_000;
 
 /// In-memory store for A2A task state.
 pub struct TaskStore {
-    tasks: RwLock<HashMap<String, TaskState>>,
+    tasks: RwLock<HashMap<String, Task>>,
 }
 
 impl TaskStore {
@@ -47,13 +47,95 @@ impl TaskStore {
     }
 }
 
-/// State of an inbound A2A task.
-#[derive(Debug, Clone, Serialize)]
-pub struct TaskState {
+// ── v1.0 Protocol Types ─────────────────────────────────────────
+
+/// A2A v1.0 message part — oneof discriminated by which field is present.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Part {
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        metadata: Option<serde_json::Value>,
+    },
+    File {
+        #[serde(rename = "file")]
+        file: FileContent,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        metadata: Option<serde_json::Value>,
+    },
+    Data {
+        data: serde_json::Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        metadata: Option<serde_json::Value>,
+    },
+}
+
+/// File content — either inline bytes or a URL reference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileContent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// A2A v1.0 Message object.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub role: String,
+    pub parts: Vec<Part>,
+    #[serde(rename = "messageId")]
+    pub message_id: String,
+    #[serde(rename = "contextId", skip_serializing_if = "Option::is_none")]
+    pub context_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// A2A v1.0 TaskStatus — contains state and optional message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskStatus {
+    pub state: A2aTaskState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<Message>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+/// A2A v1.0 Artifact object.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Artifact {
+    #[serde(rename = "artifactId")]
+    pub artifact_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub parts: Vec<Part>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<Vec<String>>,
+}
+
+/// A2A v1.0 Task object.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Task {
     pub id: String,
-    #[serde(rename = "state")]
-    pub status: A2aTaskState,
-    pub artifacts: Vec<serde_json::Value>,
+    pub status: TaskStatus,
+    #[serde(rename = "contextId", skip_serializing_if = "Option::is_none")]
+    pub context_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifacts: Option<Vec<Artifact>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history: Option<Vec<Message>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// A2A v1.0 task state enum — SCREAMING_SNAKE_CASE with `TASK_STATE_` prefix.
@@ -323,10 +405,22 @@ async fn handle_message_send(
     task_store: &Arc<TaskStore>,
     req: JsonRpcRequest,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // Extract inbound message_id and context_id for propagation.
+    let inbound_message_id = req
+        .params
+        .pointer("/message/messageId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let inbound_context_id = req
+        .params
+        .pointer("/message/contextId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     // Extract message text from params.
     // v1.0: detect part type by presence of `text` field (oneof).
     // Backward-compat: also accept v0.3 `kind: "text"` discriminator.
-    let message = req
+    let message_text = req
         .params
         .pointer("/message/parts")
         .and_then(|parts| parts.as_array())
@@ -351,7 +445,7 @@ async fn handle_message_send(
                 .map(String::from)
         });
 
-    let Some(message) = message else {
+    let Some(message_text) = message_text else {
         return (
             StatusCode::OK,
             Json(rpc_error(
@@ -363,6 +457,7 @@ async fn handle_message_send(
     };
 
     let task_id = uuid::Uuid::new_v4().to_string();
+    let context_id = inbound_context_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     // Store task as working (enforce capacity limit to prevent memory exhaustion)
     {
@@ -379,13 +474,32 @@ async fn handle_message_send(
         }
         tasks.insert(
             task_id.clone(),
-            TaskState {
+            Task {
                 id: task_id.clone(),
-                status: A2aTaskState::Working,
-                artifacts: vec![],
+                status: TaskStatus {
+                    state: A2aTaskState::Working,
+                    message: None,
+                    timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                },
+                context_id: Some(context_id.clone()),
+                artifacts: None,
+                history: None,
+                metadata: None,
             },
         );
     }
+
+    // Build history entry from the inbound message
+    let inbound_msg = Message {
+        role: "ROLE_USER".to_string(),
+        parts: vec![Part::Text {
+            text: message_text.clone(),
+            metadata: None,
+        }],
+        message_id: inbound_message_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        context_id: Some(context_id.clone()),
+        metadata: None,
+    };
 
     // Process via agent pipeline
     let config = state.config.lock().clone();
@@ -399,7 +513,7 @@ async fn handle_message_send(
     let session_id = format!("a2a-{task_id}");
     match Box::pin(crate::agent::process_message(
         config,
-        &message,
+        &message_text,
         Some(&session_id),
     ))
     .await
@@ -409,21 +523,51 @@ async fn handle_message_send(
             if let Some((ref token, chat_id)) = telegram_notify {
                 let notice = format!(
                     "\u{1f4e8} *A2A received:* _{}_\n\n{}",
-                    message.replace('*', "\\*").replace('_', "\\_"),
+                    message_text.replace('*', "\\*").replace('_', "\\_"),
                     response
                 );
                 notify_telegram_chat(token, chat_id, &notice).await;
             }
 
-            let artifact = json!({
-                "artifactId": uuid::Uuid::new_v4().to_string(),
-                "name": "response",
-                "parts": [{ "text": response }]
-            });
-            let mut tasks = task_store.tasks.write().await;
-            if let Some(task) = tasks.get_mut(&task_id) {
-                task.status = A2aTaskState::Completed;
-                task.artifacts = vec![artifact.clone()];
+            let response_msg = Message {
+                role: "ROLE_AGENT".to_string(),
+                parts: vec![Part::Text {
+                    text: response.clone(),
+                    metadata: None,
+                }],
+                message_id: uuid::Uuid::new_v4().to_string(),
+                context_id: Some(context_id.clone()),
+                metadata: None,
+            };
+
+            let artifact = Artifact {
+                artifact_id: uuid::Uuid::new_v4().to_string(),
+                name: Some("response".to_string()),
+                description: None,
+                parts: vec![Part::Text {
+                    text: response,
+                    metadata: None,
+                }],
+                metadata: None,
+                extensions: None,
+            };
+
+            let task = Task {
+                id: task_id.clone(),
+                status: TaskStatus {
+                    state: A2aTaskState::Completed,
+                    message: Some(response_msg),
+                    timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                },
+                context_id: Some(context_id),
+                artifacts: Some(vec![artifact]),
+                history: Some(vec![inbound_msg]),
+                metadata: None,
+            };
+
+            {
+                let mut tasks = task_store.tasks.write().await;
+                tasks.insert(task_id.clone(), task.clone());
             }
 
             (
@@ -431,19 +575,40 @@ async fn handle_message_send(
                 Json(json!({
                     "jsonrpc": "2.0",
                     "id": req.id,
-                    "result": {
-                        "id": task_id,
-                        "status": { "state": A2aTaskState::Completed },
-                        "artifacts": [artifact]
-                    }
+                    "result": task
                 })),
             )
         }
         Err(e) => {
             tracing::error!(task_id = %task_id, error = %e, "A2A task processing failed");
-            let mut tasks = task_store.tasks.write().await;
-            if let Some(task) = tasks.get_mut(&task_id) {
-                task.status = A2aTaskState::Failed;
+
+            let error_msg = Message {
+                role: "ROLE_AGENT".to_string(),
+                parts: vec![Part::Text {
+                    text: "Internal processing error".to_string(),
+                    metadata: None,
+                }],
+                message_id: uuid::Uuid::new_v4().to_string(),
+                context_id: Some(context_id.clone()),
+                metadata: None,
+            };
+
+            let task = Task {
+                id: task_id.clone(),
+                status: TaskStatus {
+                    state: A2aTaskState::Failed,
+                    message: Some(error_msg),
+                    timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                },
+                context_id: Some(context_id),
+                artifacts: None,
+                history: Some(vec![inbound_msg]),
+                metadata: None,
+            };
+
+            {
+                let mut tasks = task_store.tasks.write().await;
+                tasks.insert(task_id.clone(), task.clone());
             }
 
             (
@@ -451,10 +616,7 @@ async fn handle_message_send(
                 Json(json!({
                     "jsonrpc": "2.0",
                     "id": req.id,
-                    "result": {
-                        "id": task_id,
-                        "status": { "state": A2aTaskState::Failed, "message": "Internal processing error" }
-                    }
+                    "result": task
                 })),
             )
         }
@@ -481,11 +643,7 @@ async fn handle_tasks_get(
             Json(json!({
                 "jsonrpc": "2.0",
                 "id": req.id,
-                "result": {
-                    "id": task.id,
-                    "status": { "state": task.status },
-                    "artifacts": task.artifacts
-                }
+                "result": task
             })),
         ),
         None => (
@@ -863,10 +1021,17 @@ mod tests {
             let mut tasks = store.tasks.write().await;
             tasks.insert(
                 task_id.clone(),
-                TaskState {
+                Task {
                     id: task_id.clone(),
-                    status: A2aTaskState::Working,
-                    artifacts: vec![],
+                    status: TaskStatus {
+                        state: A2aTaskState::Working,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: None,
+                    artifacts: None,
+                    history: None,
+                    metadata: None,
                 },
             );
         }
@@ -875,15 +1040,25 @@ mod tests {
         {
             let tasks = store.tasks.read().await;
             let task = tasks.get(&task_id).unwrap();
-            assert_eq!(task.status, A2aTaskState::Working);
+            assert_eq!(task.status.state, A2aTaskState::Working);
         }
 
         // Update
         {
             let mut tasks = store.tasks.write().await;
             if let Some(task) = tasks.get_mut(&task_id) {
-                task.status = A2aTaskState::Completed;
-                task.artifacts = vec![json!({"text": "done"})];
+                task.status.state = A2aTaskState::Completed;
+                task.artifacts = Some(vec![Artifact {
+                    artifact_id: "a1".to_string(),
+                    name: None,
+                    description: None,
+                    parts: vec![Part::Text {
+                        text: "done".to_string(),
+                        metadata: None,
+                    }],
+                    metadata: None,
+                    extensions: None,
+                }]);
             }
         }
 
@@ -891,8 +1066,8 @@ mod tests {
         {
             let tasks = store.tasks.read().await;
             let task = tasks.get(&task_id).unwrap();
-            assert_eq!(task.status, A2aTaskState::Completed);
-            assert_eq!(task.artifacts.len(), 1);
+            assert_eq!(task.status.state, A2aTaskState::Completed);
+            assert_eq!(task.artifacts.as_ref().unwrap().len(), 1);
         }
     }
 
@@ -1064,10 +1239,27 @@ mod tests {
             let mut tasks = store.tasks.write().await;
             tasks.insert(
                 "task-abc".into(),
-                TaskState {
+                Task {
                     id: "task-abc".into(),
-                    status: A2aTaskState::Completed,
-                    artifacts: vec![json!({"text": "result"})],
+                    status: TaskStatus {
+                        state: A2aTaskState::Completed,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: None,
+                    artifacts: Some(vec![Artifact {
+                        artifact_id: "a1".to_string(),
+                        name: None,
+                        description: None,
+                        parts: vec![Part::Text {
+                            text: "result".to_string(),
+                            metadata: None,
+                        }],
+                        metadata: None,
+                        extensions: None,
+                    }]),
+                    history: None,
+                    metadata: None,
                 },
             );
         }
@@ -1082,7 +1274,10 @@ mod tests {
         assert!(body["error"].is_null());
         assert_eq!(body["result"]["id"], "task-abc");
         assert_eq!(body["result"]["status"]["state"], "TASK_STATE_COMPLETED");
-        assert_eq!(body["result"]["artifacts"].as_array().unwrap().len(), 1);
+        let artifacts = body["result"]["artifacts"].as_array().unwrap();
+        assert_eq!(artifacts.len(), 1);
+        // Verify artifact has v1.0 structure with parts
+        assert!(artifacts[0]["parts"].is_array());
     }
 
     #[tokio::test]
@@ -1107,10 +1302,17 @@ mod tests {
             for i in 0..MAX_TASKS {
                 tasks.insert(
                     format!("task-{i}"),
-                    TaskState {
+                    Task {
                         id: format!("task-{i}"),
-                        status: A2aTaskState::Completed,
-                        artifacts: vec![],
+                        status: TaskStatus {
+                            state: A2aTaskState::Completed,
+                            message: None,
+                            timestamp: None,
+                        },
+                        context_id: None,
+                        artifacts: None,
+                        history: None,
+                        metadata: None,
                     },
                 );
             }
@@ -1192,7 +1394,7 @@ mod tests {
         let task_id = result["id"].as_str().unwrap();
         let tasks = task_store.tasks.read().await;
         let task = tasks.get(task_id).unwrap();
-        assert_eq!(task.status, A2aTaskState::Failed);
+        assert_eq!(task.status.state, A2aTaskState::Failed);
     }
 
     #[tokio::test]
@@ -1208,7 +1410,8 @@ mod tests {
                 "message": {
                     "role": "ROLE_USER",
                     "parts": [{"text": "structured message"}],
-                    "messageId": "msg-001"
+                    "messageId": "msg-001",
+                    "contextId": "ctx-abc"
                 }
             }),
         };
@@ -1221,6 +1424,25 @@ mod tests {
         assert!(result["id"].is_string());
         // Will fail due to no provider, but verifies the message was extracted
         assert_eq!(result["status"]["state"], "TASK_STATE_FAILED");
+
+        // v1.0: TaskStatus.message must be a Message object, not a string
+        let status_msg = &result["status"]["message"];
+        assert!(
+            status_msg.is_object(),
+            "TaskStatus.message must be a Message object"
+        );
+        assert_eq!(status_msg["role"], "ROLE_AGENT");
+        assert!(status_msg["messageId"].is_string());
+        assert!(status_msg["parts"].is_array());
+
+        // v1.0: contextId propagated from inbound message
+        assert_eq!(result["contextId"], "ctx-abc");
+
+        // v1.0: history contains the inbound message
+        let history = result["history"].as_array().unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0]["role"], "ROLE_USER");
+        assert_eq!(history[0]["messageId"], "msg-001");
 
         // Task was created in the store
         let task_id = result["id"].as_str().unwrap();
@@ -1239,10 +1461,17 @@ mod tests {
             for i in 0..MAX_TASKS {
                 tasks.insert(
                     format!("fill-{i}"),
-                    TaskState {
+                    Task {
                         id: format!("fill-{i}"),
-                        status: A2aTaskState::Completed,
-                        artifacts: vec![],
+                        status: TaskStatus {
+                            state: A2aTaskState::Completed,
+                            message: None,
+                            timestamp: None,
+                        },
+                        context_id: None,
+                        artifacts: None,
+                        history: None,
+                        metadata: None,
                     },
                 );
             }
