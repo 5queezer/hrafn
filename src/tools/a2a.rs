@@ -636,8 +636,11 @@ mod tests {
         message: &str,
     ) -> anyhow::Result<ToolResult> {
         let client = tool.build_client()?;
-        let parsed = reqwest::Url::parse(url)?;
-        let send_url = parsed.join("/message:send")?;
+        let mut send_url = reqwest::Url::parse(url)?;
+        send_url
+            .path_segments_mut()
+            .map_err(|()| anyhow::anyhow!("URL cannot be a base"))?
+            .push("message:send");
         let body = json!({
             "message": {
                 "role": "ROLE_USER",
@@ -717,19 +720,15 @@ mod tests {
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let server = MockServer::start().await;
-        let rpc_response = json!({
-            "jsonrpc": "2.0",
-            "id": "test",
-            "result": {
-                "id": "task-1",
-                "status": {"state": "TASK_STATE_COMPLETED"},
-                "artifacts": [{"parts": [{"text": "response"}]}]
-            }
+        let rest_response = json!({
+            "id": "task-1",
+            "status": {"state": "TASK_STATE_COMPLETED"},
+            "artifacts": [{"parts": [{"text": "response"}]}]
         });
 
         Mock::given(method("POST"))
             .and(path("/message:send"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&rpc_response))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&rest_response))
             .mount(&server)
             .await;
 
@@ -739,7 +738,7 @@ mod tests {
             .unwrap();
         assert!(result.success);
         let parsed: serde_json::Value = serde_json::from_str(&result.output).unwrap();
-        assert_eq!(parsed["result"]["status"]["state"], "TASK_STATE_COMPLETED");
+        assert_eq!(parsed["status"]["state"], "TASK_STATE_COMPLETED");
     }
 
     #[tokio::test]
@@ -752,10 +751,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/message:send"))
             .and(header("Authorization", "Bearer my-token"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(json!({"jsonrpc": "2.0", "id": "1", "result": {}})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "task-1"})))
             .mount(&server)
             .await;
 
