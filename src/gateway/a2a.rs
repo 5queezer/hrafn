@@ -2,12 +2,12 @@
 //!
 //! Implements a minimal subset of the A2A (Agent-to-Agent) protocol:
 //! - Agent Card discovery (`GET /.well-known/agent-card.json`)
-//! - `message/send` (synchronous request/response, no async queue)
+//! - `message/send` (synchronous request/response)
+//! - `message/stream` (SSE streaming)
 //! - `tasks/get` (polling only)
 //! - Bearer token authentication
 //!
-//! **Not yet implemented (see issue #3566):**
-//! - `message/stream` (SSE)
+//! **Not yet implemented:**
 //! - `tasks/cancel`
 //! - `input-required` state / multi-turn conversations (`contextId`)
 //! - Push notifications
@@ -21,13 +21,17 @@ use axum::{
     Json,
     extract::State,
     http::{HeaderMap, StatusCode, header},
-    response::IntoResponse,
+    response::{
+        IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_stream::StreamExt as _;
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -278,7 +282,7 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
             "protocol_version": protocol_version
         }],
         "capabilities": {
-            "streaming": false,
+            "streaming": true,
             "pushNotifications": false
         },
         "defaultInputModes": ["text/plain"],
@@ -424,111 +428,12 @@ async fn handle_message_send(
     task_store: &Arc<TaskStore>,
     req: JsonRpcRequest,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    // Parse the inbound message: preserve the original v1 Message when present,
-    // only synthesize for the legacy simple-string fallback.
-    let (message_text, inbound_msg, context_id) = if let Some(msg_obj) = req
-        .params
-        .get("message")
-        .filter(|m| m.get("parts").and_then(|p| p.as_array()).is_some())
-    {
-        // v1.0 structured message — preserve original parts/metadata.
-        // Extract text for the agent pipeline (first text part).
-        let text = msg_obj
-            .pointer("/parts")
-            .and_then(|parts| parts.as_array())
-            .and_then(|parts| {
-                parts.iter().find_map(|p| {
-                    p.get("text")
-                        .and_then(|t| t.as_str())
-                        .map(String::from)
-                        .or_else(|| {
-                            // v0.3 compat: `kind` discriminator
-                            if p.get("kind").and_then(|t| t.as_str()) == Some("text") {
-                                p.get("text").and_then(|t| t.as_str()).map(String::from)
-                            } else {
-                                None
-                            }
-                        })
-                })
-            });
-        let Some(text) = text else {
-            return (
-                StatusCode::OK,
-                Json(rpc_error(
-                    req.id,
-                    -32602,
-                    "Invalid params: missing message text",
-                )),
-            );
-        };
-
-        let ctx_id = msg_obj
-            .get("contextId")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-        // Deserialize the full original Message, preserving all parts/metadata.
-        let inbound: Message = match serde_json::from_value::<Message>(msg_obj.clone()) {
-            Ok(mut msg) => {
-                // Ensure context_id is set
-                if msg.context_id.is_none() {
-                    msg.context_id = Some(ctx_id.clone());
-                }
-                msg
-            }
-            Err(_) => {
-                // Fallback: build from extracted fields if deserialization fails
-                Message {
-                    role: msg_obj
-                        .get("role")
-                        .and_then(|r| r.as_str())
-                        .unwrap_or("ROLE_USER")
-                        .to_string(),
-                    parts: vec![Part::Text {
-                        text: text.clone(),
-                        metadata: None,
-                    }],
-                    message_id: msg_obj
-                        .get("messageId")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    context_id: Some(ctx_id.clone()),
-                    metadata: msg_obj.get("metadata").cloned(),
-                }
-            }
-        };
-
-        (text, inbound, ctx_id)
-    } else if let Some(text) = req
-        .params
-        .get("message")
-        .and_then(|m| m.as_str())
-        .map(String::from)
-    {
-        // Legacy simple-string fallback — synthesize a Message.
-        let ctx_id = uuid::Uuid::new_v4().to_string();
-        let inbound = Message {
-            role: "ROLE_USER".to_string(),
-            parts: vec![Part::Text {
-                text: text.clone(),
-                metadata: None,
-            }],
-            message_id: uuid::Uuid::new_v4().to_string(),
-            context_id: Some(ctx_id.clone()),
-            metadata: None,
-        };
-        (text, inbound, ctx_id)
-    } else {
-        return (
-            StatusCode::OK,
-            Json(rpc_error(
-                req.id,
-                -32602,
-                "Invalid params: missing message text",
-            )),
-        );
+    // Parse the inbound message using the shared helper.
+    let (message_text, inbound_msg, context_id) = match parse_inbound_message(&req.params) {
+        Ok(parsed) => parsed,
+        Err(err_msg) => {
+            return (StatusCode::OK, Json(rpc_error(req.id, -32602, err_msg)));
+        }
     };
 
     let task_id = uuid::Uuid::new_v4().to_string();
@@ -821,6 +726,360 @@ pub async fn handle_tasks_get_rest(
     unwrap_rpc_to_rest(status, body).into_response()
 }
 
+// ── v1.0 SSE streaming endpoint ─────────────────────────────────
+
+/// `POST /message:stream` — v1.0 REST binding for SendStreamingMessage (SSE).
+///
+/// Accepts the same body as `/message:send` but returns a Server-Sent Events
+/// stream instead of a single JSON response.  Events emitted:
+///
+/// 1. `TaskStatusUpdateEvent` with `TASK_STATE_WORKING` (immediately)
+/// 2. `TaskStatusUpdateEvent` with terminal state + `TaskArtifactUpdateEvent`
+///    with the response artifact (on completion/failure)
+pub async fn handle_message_stream_rest(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(params): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let (Some(_card), Some(task_store)) = (&state.a2a_agent_card, &state.a2a_task_store) else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "A2A protocol not enabled"})),
+        )
+            .into_response();
+    };
+
+    if let Err(resp) = require_a2a_auth(&state, &headers) {
+        return resp.into_response();
+    }
+
+    // Parse the inbound message (same logic as handle_message_send).
+    let (message_text, inbound_msg, context_id) = match parse_inbound_message(&params) {
+        Ok(parsed) => parsed,
+        Err(err_msg) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": {"code": -32602, "message": err_msg}})),
+            )
+                .into_response();
+        }
+    };
+
+    let task_id = uuid::Uuid::new_v4().to_string();
+
+    // Store task as working
+    {
+        let mut tasks = task_store.tasks.write().await;
+        if tasks.len() >= MAX_TASKS {
+            tasks.retain(|_, t| !t.status.state.is_terminal());
+            if tasks.len() >= MAX_TASKS {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"error": {"code": -32000, "message": "Task store full"}})),
+                )
+                    .into_response();
+            }
+        }
+        tasks.insert(
+            task_id.clone(),
+            Task {
+                id: task_id.clone(),
+                status: TaskStatus {
+                    state: A2aTaskState::Working,
+                    message: None,
+                    timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                },
+                context_id: Some(context_id.clone()),
+                artifacts: None,
+                history: None,
+                metadata: None,
+            },
+        );
+    }
+
+    // Spawn agent processing in background and stream results via SSE.
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel::<Result<String, String>>();
+    let config = state.config.lock().clone();
+    let session_id = format!("a2a-{task_id}");
+    let message_text_clone = message_text.clone();
+
+    // Telegram notification config
+    let telegram_notify = config.a2a.notify_chat_id.and_then(|chat_id| {
+        config
+            .channels_config
+            .telegram
+            .as_ref()
+            .map(|t| (t.bot_token.clone(), chat_id))
+    });
+
+    tokio::spawn(async move {
+        let result = Box::pin(crate::agent::process_message(
+            config,
+            &message_text_clone,
+            Some(&session_id),
+        ))
+        .await;
+
+        match result {
+            Ok(response) => {
+                if let Some((ref token, chat_id)) = telegram_notify {
+                    let notice = format!(
+                        "\u{1f4e8} *A2A received:* _{}_\n\n{}",
+                        message_text_clone.replace('*', "\\*").replace('_', "\\_"),
+                        response
+                    );
+                    notify_telegram_chat(token, chat_id, &notice).await;
+                }
+                let _ = result_tx.send(Ok(response));
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "A2A streaming task processing failed");
+                let _ = result_tx.send(Err(e.to_string()));
+            }
+        }
+    });
+
+    // Build the SSE stream via an mpsc channel.
+    let (sse_tx, sse_rx) = tokio::sync::mpsc::channel::<Event>(8);
+    let task_store_sse = Arc::clone(task_store);
+
+    tokio::spawn(async move {
+        // 1. Emit initial working status event.
+        let working_event = json!({
+            "taskId": task_id,
+            "contextId": context_id,
+            "status": TaskStatus {
+                state: A2aTaskState::Working,
+                message: None,
+                timestamp: Some(chrono::Utc::now().to_rfc3339()),
+            },
+            "kind": "status-update"
+        });
+        let _ = sse_tx
+            .send(sse_json_event("TaskStatusUpdateEvent", &working_event))
+            .await;
+
+        // 2. Wait for agent processing to complete.
+        let result = result_rx.await;
+
+        match result {
+            Ok(Ok(response)) => {
+                let response_msg = Message {
+                    role: "ROLE_AGENT".to_string(),
+                    parts: vec![Part::Text {
+                        text: response.clone(),
+                        metadata: None,
+                    }],
+                    message_id: uuid::Uuid::new_v4().to_string(),
+                    context_id: Some(context_id.clone()),
+                    metadata: None,
+                };
+
+                let artifact = Artifact {
+                    artifact_id: uuid::Uuid::new_v4().to_string(),
+                    name: Some("response".to_string()),
+                    description: None,
+                    parts: vec![Part::Text {
+                        text: response,
+                        metadata: None,
+                    }],
+                    metadata: None,
+                    extensions: None,
+                };
+
+                // Emit artifact update.
+                let artifact_event = json!({
+                    "taskId": task_id,
+                    "contextId": context_id,
+                    "artifact": artifact,
+                    "append": false,
+                    "lastChunk": true,
+                    "kind": "artifact-update"
+                });
+                let _ = sse_tx
+                    .send(sse_json_event("TaskArtifactUpdateEvent", &artifact_event))
+                    .await;
+
+                // Emit terminal status.
+                let completed_event = json!({
+                    "taskId": task_id,
+                    "contextId": context_id,
+                    "status": TaskStatus {
+                        state: A2aTaskState::Completed,
+                        message: Some(response_msg.clone()),
+                        timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                    },
+                    "final": true,
+                    "kind": "status-update"
+                });
+                let _ = sse_tx
+                    .send(sse_json_event("TaskStatusUpdateEvent", &completed_event))
+                    .await;
+
+                // Update task store.
+                let task = Task {
+                    id: task_id,
+                    status: TaskStatus {
+                        state: A2aTaskState::Completed,
+                        message: Some(response_msg),
+                        timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                    },
+                    context_id: Some(context_id),
+                    artifacts: Some(vec![artifact]),
+                    history: Some(vec![inbound_msg]),
+                    metadata: None,
+                };
+                task_store_sse
+                    .tasks
+                    .write()
+                    .await
+                    .insert(task.id.clone(), task);
+            }
+            _ => {
+                let error_msg = Message {
+                    role: "ROLE_AGENT".to_string(),
+                    parts: vec![Part::Text {
+                        text: "Internal processing error".to_string(),
+                        metadata: None,
+                    }],
+                    message_id: uuid::Uuid::new_v4().to_string(),
+                    context_id: Some(context_id.clone()),
+                    metadata: None,
+                };
+
+                let failed_event = json!({
+                    "taskId": task_id,
+                    "contextId": context_id,
+                    "status": TaskStatus {
+                        state: A2aTaskState::Failed,
+                        message: Some(error_msg.clone()),
+                        timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                    },
+                    "final": true,
+                    "kind": "status-update"
+                });
+                let _ = sse_tx
+                    .send(sse_json_event("TaskStatusUpdateEvent", &failed_event))
+                    .await;
+
+                let task = Task {
+                    id: task_id,
+                    status: TaskStatus {
+                        state: A2aTaskState::Failed,
+                        message: Some(error_msg),
+                        timestamp: Some(chrono::Utc::now().to_rfc3339()),
+                    },
+                    context_id: Some(context_id),
+                    artifacts: None,
+                    history: Some(vec![inbound_msg]),
+                    metadata: None,
+                };
+                task_store_sse
+                    .tasks
+                    .write()
+                    .await
+                    .insert(task.id.clone(), task);
+            }
+        }
+        // Channel drops here, closing the SSE stream.
+    });
+
+    let stream =
+        tokio_stream::wrappers::ReceiverStream::new(sse_rx).map(Ok::<_, std::convert::Infallible>);
+
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
+
+/// Parse the inbound message from request params.
+/// Returns `(message_text, inbound_msg, context_id)` on success.
+fn parse_inbound_message(
+    params: &serde_json::Value,
+) -> Result<(String, Message, String), &'static str> {
+    if let Some(msg_obj) = params
+        .get("message")
+        .filter(|m| m.get("parts").and_then(|p| p.as_array()).is_some())
+    {
+        // v1.0 structured message — preserve original parts/metadata.
+        let text = msg_obj
+            .pointer("/parts")
+            .and_then(|parts| parts.as_array())
+            .and_then(|parts| {
+                parts.iter().find_map(|p| {
+                    p.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(String::from)
+                        .or_else(|| {
+                            if p.get("kind").and_then(|t| t.as_str()) == Some("text") {
+                                p.get("text").and_then(|t| t.as_str()).map(String::from)
+                            } else {
+                                None
+                            }
+                        })
+                })
+            });
+        let Some(text) = text else {
+            return Err("Invalid params: missing message text");
+        };
+
+        let ctx_id = msg_obj
+            .get("contextId")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        let inbound: Message = match serde_json::from_value::<Message>(msg_obj.clone()) {
+            Ok(mut msg) => {
+                if msg.context_id.is_none() {
+                    msg.context_id = Some(ctx_id.clone());
+                }
+                msg
+            }
+            Err(_) => Message {
+                role: msg_obj
+                    .get("role")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("ROLE_USER")
+                    .to_string(),
+                parts: vec![Part::Text {
+                    text: text.clone(),
+                    metadata: None,
+                }],
+                message_id: msg_obj
+                    .get("messageId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                context_id: Some(ctx_id.clone()),
+                metadata: msg_obj.get("metadata").cloned(),
+            },
+        };
+
+        Ok((text, inbound, ctx_id))
+    } else if let Some(text) = params
+        .get("message")
+        .and_then(|m| m.as_str())
+        .map(String::from)
+    {
+        // Legacy simple-string fallback.
+        let ctx_id = uuid::Uuid::new_v4().to_string();
+        let inbound = Message {
+            role: "ROLE_USER".to_string(),
+            parts: vec![Part::Text {
+                text: text.clone(),
+                metadata: None,
+            }],
+            message_id: uuid::Uuid::new_v4().to_string(),
+            context_id: Some(ctx_id.clone()),
+            metadata: None,
+        };
+        Ok((text, inbound, ctx_id))
+    } else {
+        Err("Invalid params: missing message text")
+    }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 /// Best-effort Telegram notification for A2A activity.
@@ -843,6 +1102,14 @@ async fn notify_telegram_chat(bot_token: &str, chat_id: i64, text: &str) {
         }))
         .send()
         .await;
+}
+
+/// Build an SSE `Event` with a named event type and JSON data.
+fn sse_json_event(event_type: &str, data: &serde_json::Value) -> Event {
+    Event::default()
+        .event(event_type)
+        .json_data(data)
+        .unwrap_or_else(|_| Event::default().data("{}"))
 }
 
 fn rpc_error(id: serde_json::Value, code: i32, message: &str) -> serde_json::Value {
@@ -1022,7 +1289,7 @@ mod tests {
         assert_eq!(ifaces[0]["protocol_binding"], "JSONRPC");
         assert_eq!(ifaces[0]["protocol_version"], "1.0");
         assert!(card["capabilities"].is_object());
-        assert_eq!(card["capabilities"]["streaming"], false);
+        assert_eq!(card["capabilities"]["streaming"], true);
         // v1.0: security_schemes replaces authentication
         assert!(card["security_schemes"]["bearer"].is_object());
         assert!(card["security_requirements"].is_array());
