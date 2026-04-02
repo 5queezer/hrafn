@@ -39,6 +39,7 @@ use crate::tools::canvas::CanvasStore;
 use crate::tools::traits::ToolSpec;
 use crate::util::truncate_with_ellipsis;
 use anyhow::{Context, Result};
+use axum::extract::DefaultBodyLimit;
 use axum::{
     Router,
     body::Bytes,
@@ -52,7 +53,6 @@ use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 use uuid::Uuid;
 
@@ -937,7 +937,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     // Config PUT needs larger body limit (1MB)
     let config_put_router = Router::new()
         .route("/api/config", put(api::handle_api_config_put))
-        .layer(RequestBodyLimitLayer::new(1_048_576));
+        .layer(DefaultBodyLimit::max(1_048_576));
 
     // A2A routes need a larger body limit (configurable, default 10MB) to
     // support binary message parts.
@@ -953,7 +953,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             get(a2a::handle_tasks_by_context_rest),
         )
         .route("/a2a", post(a2a::handle_a2a_rpc))
-        .layer(RequestBodyLimitLayer::new(config.a2a.body_limit_bytes));
+        .layer(DefaultBodyLimit::max(config.a2a.body_limit_bytes));
 
     // Build router with middleware
     let inner = Router::new()
@@ -1089,7 +1089,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // ── SPA fallback: non-API GET requests serve index.html ──
         .fallback(get(static_files::handle_spa_fallback))
         .with_state(state)
-        .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
+        .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(gateway_request_timeout_secs()),

@@ -246,6 +246,7 @@ impl A2aTool {
         status: Option<&str>,
         history_length: Option<u64>,
         include_artifacts: Option<bool>,
+        status_timestamp_after: Option<&str>,
     ) -> anyhow::Result<ToolResult> {
         let mut list_url = self.validate_url(url)?;
         list_url
@@ -272,6 +273,9 @@ impl A2aTool {
             }
             if let Some(ia) = include_artifacts {
                 query.append_pair("include_artifacts", &ia.to_string());
+            }
+            if let Some(sta) = status_timestamp_after {
+                query.append_pair("status_timestamp_after", sta);
             }
         }
 
@@ -401,6 +405,10 @@ impl Tool for A2aTool {
                 "include_artifacts": {
                     "type": "boolean",
                     "description": "Include artifact data in listed tasks (for list action)"
+                },
+                "status_timestamp_after": {
+                    "type": "string",
+                    "description": "Filter tasks with status timestamp after this ISO 8601 date (for list action)"
                 }
             },
             "required": ["action", "url"]
@@ -510,6 +518,8 @@ impl Tool for A2aTool {
                 let status = args.get("status").and_then(|v| v.as_str());
                 let history_length = args.get("history_length").and_then(|v| v.as_u64());
                 let include_artifacts = args.get("include_artifacts").and_then(|v| v.as_bool());
+                let status_timestamp_after =
+                    args.get("status_timestamp_after").and_then(|v| v.as_str());
                 self.action_list(
                     &url,
                     bearer_token.as_deref(),
@@ -519,6 +529,7 @@ impl Tool for A2aTool {
                     status,
                     history_length,
                     include_artifacts,
+                    status_timestamp_after,
                 )
                 .await
             }

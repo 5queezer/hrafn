@@ -1124,6 +1124,13 @@ async fn handle_tasks_list(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let status_timestamp_after = req
+        .params
+        .get("statusTimestampAfter")
+        .or_else(|| req.params.get("status_timestamp_after"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     let tasks = task_store.tasks.read().await;
 
     // Collect and sort by task ID for stable ordering
@@ -1141,6 +1148,16 @@ async fn handle_tasks_list(
             }
             if let Some(ref status) = status_filter {
                 if &t.status.state != status {
+                    return false;
+                }
+            }
+            if let Some(ref after) = status_timestamp_after {
+                if let Some(ref ts) = t.status.timestamp {
+                    if ts.as_str() <= after.as_str() {
+                        return false;
+                    }
+                } else {
+                    // Tasks without a status timestamp are excluded when filter is active
                     return false;
                 }
             }
@@ -1387,6 +1404,7 @@ pub struct ListTasksQuery {
     pub page_token: Option<String>,
     pub history_length: Option<u64>,
     pub include_artifacts: Option<bool>,
+    pub status_timestamp_after: Option<String>,
 }
 
 /// `GET /tasks` — v1.0 REST binding for ListTasks.
@@ -1425,6 +1443,9 @@ pub async fn handle_tasks_list_rest(
     }
     if let Some(ia) = query.include_artifacts {
         params["includeArtifacts"] = json!(ia);
+    }
+    if let Some(sta) = query.status_timestamp_after {
+        params["statusTimestampAfter"] = json!(sta);
     }
 
     let req = JsonRpcRequest {
