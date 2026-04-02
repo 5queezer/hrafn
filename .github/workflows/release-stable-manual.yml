@@ -196,6 +196,12 @@ jobs:
             linker_env: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER
             linker: aarch64-linux-gnu-gcc
           - os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            artifact: hrafn
+            ext: tar.gz
+            use_cross: true
+            cargo_features: channel-lark,whatsapp-web  # matrix-sdk hits recursion limit under musl
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-musl
             artifact: hrafn
             ext: tar.gz
@@ -390,6 +396,7 @@ jobs:
         run: |
           required_assets=(
             "hrafn-x86_64-unknown-linux-gnu.tar.gz"
+            "hrafn-x86_64-unknown-linux-musl.tar.gz"
             "hrafn-aarch64-unknown-linux-gnu.tar.gz"
             "hrafn-aarch64-unknown-linux-musl.tar.gz"
             "hrafn-armv7-unknown-linux-gnueabihf.tar.gz"
