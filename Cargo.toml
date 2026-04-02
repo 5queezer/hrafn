@@ -6,9 +6,9 @@ resolver = "2"
 name = "hrafn"
 version = "0.1.0"
 edition = "2024"
-authors = ["theonlyhennygod"]
+authors = ["Christian Pojoni", "theonlyhennygod"]
 license = "MIT OR Apache-2.0"
-description = "Zero overhead. Zero compromise. 100% Rust. The fastest, smallest AI assistant."
+description = "Lightweight, modular AI agent runtime"
 repository = "https://github.com/5queezer/hrafn"
 readme = "README.md"
 keywords = ["ai", "agent", "cli", "assistant", "chatbot"]
@@ -243,14 +243,25 @@ landlock = { version = "0.4", optional = true }
 libc = "0.2"
 
 [features]
-default = ["desktop", "observability-prometheus", "skill-creation"]
+default = [
+    "desktop",
+    "observability-prometheus",
+    "skill-creation",
+    "channel-telegram",
+    "channel-discord",
+    "channel-whatsapp",
+    "channel-signal",
+    "tool-shell",
+    "tool-a2a",
+    "gateway",
+    "memory-muninndb",
+]
 # Desktop feature: includes all desktop-only dependencies.
 # Disable with --no-default-features for embedded builds.
 desktop = [
     "dep:clap", "dep:clap_complete",
     "dep:dialoguer", "dep:console",
-    "dep:axum", "dep:hyper", "dep:hyper-util", "dep:tower", "dep:tower-http", "dep:http-body-util",
-    "dep:rust-embed", "dep:mime_guess",
+    "gateway",
     "dep:indicatif",
     "dep:tar", "dep:flate2", "dep:zip",
     "dep:which", "dep:glob",
@@ -267,6 +278,13 @@ desktop = [
     "dep:rustls", "dep:rustls-pemfile", "dep:rustls-pki-types", "dep:tokio-rustls", "dep:webpki-roots",
     "dep:cron",
     "dep:chrono-tz",
+    "channel-telegram",
+    "channel-discord",
+    "channel-whatsapp",
+    "channel-signal",
+    "tool-shell",
+    "tool-a2a",
+    "memory-muninndb",
 ]
 # Stripped-down build for ESP32-S3 (8MB flash, 512KB SRAM).
 # Use: cargo build --bin hrafn-esp32 --features target-esp32 --no-default-features
@@ -276,6 +294,18 @@ hardware = ["nusb", "tokio-serial"]
 channel-matrix = ["dep:matrix-sdk"]
 channel-lark = ["dep:prost"]
 channel-feishu = ["channel-lark"]  # Alias for Feishu users (Lark and Feishu are the same platform)
+channel-telegram = []
+channel-discord = []
+channel-whatsapp = []
+channel-signal = []
+tool-shell = []
+tool-a2a = []
+gateway = [
+    "dep:axum", "dep:hyper", "dep:hyper-util",
+    "dep:tower", "dep:tower-http", "dep:http-body-util",
+    "dep:rust-embed", "dep:mime_guess",
+]
+memory-muninndb = []
 observability-prometheus = ["dep:prometheus"]
 observability-otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
 peripheral-rpi = ["rppal"]
@@ -309,6 +339,10 @@ webauthn = []
 ci-all = [
     "desktop",
     "channel-nostr",
+    "channel-telegram",
+    "channel-discord",
+    "channel-whatsapp",
+    "channel-signal",
     "hardware",
     "channel-matrix",
     "channel-lark",
@@ -323,6 +357,10 @@ ci-all = [
     "skill-creation",
     "whatsapp-web",
     "plugins-wasm",
+    "tool-shell",
+    "tool-a2a",
+    "gateway",
+    "memory-muninndb",
 ]
 
 [profile.dev]
