@@ -158,9 +158,9 @@ Cognitive memory backend with Ebbinghaus-curve decay (memories fade naturally) a
 backend = "muninndb"
 
 [memory.muninndb]
-url = "http://127.0.0.1:8475"
-vault = "default"
-# api_key = "your-api-key"   # optional; falls back to MUNINNDB_API_KEY env var
+url = "http://127.0.0.1:8475"   # optional; falls back to MUNINNDB_URL env var
+vault = "default"               # optional; falls back to MUNINNDB_VAULT env var
+# api_key = "your-api-key"     # optional; falls back to MUNINNDB_API_KEY env var
 ```
 
 ### A2A Protocol
