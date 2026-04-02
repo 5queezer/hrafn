@@ -9,7 +9,6 @@
 //! - Bearer token authentication
 //!
 //! **Not yet implemented:**
-//! - `input-required` state / multi-turn conversations (`contextId`)
 //! - Push notifications
 //! - Structured/binary message parts (`data`, `raw`)
 //! - Async task execution
@@ -42,13 +41,34 @@ const MAX_TASKS: usize = 10_000;
 /// In-memory store for A2A task state.
 pub struct TaskStore {
     tasks: RwLock<HashMap<String, Task>>,
+    /// Maps `context_id` → list of task IDs sharing that context.
+    context_index: RwLock<HashMap<String, Vec<String>>>,
 }
 
 impl TaskStore {
     pub fn new() -> Self {
         Self {
             tasks: RwLock::new(HashMap::new()),
+            context_index: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Record a task→context association in the index.
+    async fn index_context(&self, context_id: &str, task_id: &str) {
+        let mut idx = self.context_index.write().await;
+        idx.entry(context_id.to_owned())
+            .or_default()
+            .push(task_id.to_owned());
+    }
+
+    /// Return all tasks belonging to a given `context_id`.
+    pub async fn tasks_by_context(&self, context_id: &str) -> Vec<Task> {
+        let idx = self.context_index.read().await;
+        let Some(ids) = idx.get(context_id) else {
+            return Vec::new();
+        };
+        let tasks = self.tasks.read().await;
+        ids.iter().filter_map(|id| tasks.get(id).cloned()).collect()
     }
 }
 
@@ -424,6 +444,9 @@ pub async fn handle_a2a_rpc(
         "tasks/get" => handle_tasks_get(task_store, body).await.into_response(),
         "tasks/list" => handle_tasks_list(task_store, body).await.into_response(),
         "tasks/cancel" => handle_tasks_cancel(task_store, body).await.into_response(),
+        "tasks/getByContextId" => handle_tasks_get_by_context(task_store, body)
+            .await
+            .into_response(),
         _ => (
             StatusCode::OK,
             Json(rpc_error(
@@ -551,6 +574,10 @@ async fn handle_message_send(
             },
         );
     }
+    task_store.index_context(&context_id, &task_id).await;
+
+    // Build conversation history from prior tasks in this context
+    let prompt_text = build_context_prompt(task_store, &context_id, &task_id, &message_text).await;
 
     // Process via agent pipeline
     let config = state.config.lock().clone();
@@ -561,10 +588,10 @@ async fn handle_message_send(
             .as_ref()
             .map(|t| (t.bot_token.clone(), chat_id))
     });
-    let session_id = format!("a2a-{task_id}");
+    let session_id = format!("a2a-ctx-{context_id}");
     match Box::pin(crate::agent::process_message(
         config,
-        &message_text,
+        &prompt_text,
         Some(&session_id),
     ))
     .await
@@ -928,6 +955,39 @@ async fn handle_tasks_list(
     )
 }
 
+async fn handle_tasks_get_by_context(
+    task_store: &Arc<TaskStore>,
+    req: JsonRpcRequest,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let context_id = req
+        .params
+        .get("contextId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if context_id.is_empty() {
+        return (
+            StatusCode::OK,
+            Json(rpc_error(
+                req.id,
+                -32602,
+                "Invalid params: missing contextId",
+                Some(error_reason::INVALID_PARAMS),
+            )),
+        );
+    }
+
+    let tasks = task_store.tasks_by_context(context_id).await;
+    (
+        StatusCode::OK,
+        Json(json!({
+            "jsonrpc": "2.0",
+            "id": req.id,
+            "result": tasks
+        })),
+    )
+}
+
 // ── v1.0 REST-style endpoint handlers ───────────────────────
 
 /// Unwrap a JSON-RPC response into a REST response.
@@ -1117,6 +1177,34 @@ pub async fn handle_tasks_list_rest(
     unwrap_rpc_to_rest(status, body).into_response()
 }
 
+/// `GET /tasks/by-context/{context_id}` — v1.0 REST binding for tasks by context.
+pub async fn handle_tasks_by_context_rest(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(context_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let (Some(_card), Some(task_store)) = (&state.a2a_agent_card, &state.a2a_task_store) else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "A2A protocol not enabled"})),
+        )
+            .into_response();
+    };
+
+    if let Err(resp) = require_a2a_auth(&state, &headers) {
+        return resp.into_response();
+    }
+
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: json!(uuid::Uuid::new_v4().to_string()),
+        method: "tasks/getByContextId".into(),
+        params: json!({"contextId": context_id}),
+    };
+    let (status, Json(body)) = handle_tasks_get_by_context(task_store, req).await;
+    unwrap_rpc_to_rest(status, body).into_response()
+}
+
 // ── v1.0 SSE streaming endpoint ──────────────────────────────────
 
 /// `POST /message:stream` — v1.0 REST binding for `SendStreamingMessage`.
@@ -1187,6 +1275,10 @@ pub async fn handle_message_stream_rest(
             },
         );
     }
+    task_store.index_context(&context_id, &task_id).await;
+
+    // Build conversation history from prior tasks in this context
+    let prompt_text = build_context_prompt(&task_store, &context_id, &task_id, &message_text).await;
 
     // ── Spawn background task that owns the agent lifecycle ────
     //
@@ -1211,6 +1303,7 @@ pub async fn handle_message_stream_rest(
         let tid = tid.clone();
         let ctx = ctx.clone();
         let task_store = Arc::clone(&task_store);
+        let prompt_text = prompt_text.clone();
         let message_text = message_text.clone();
 
         async move {
@@ -1293,7 +1386,7 @@ pub async fn handle_message_stream_rest(
 
             // Stream the agent turn
             let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<TurnEvent>(64);
-            let msg_owned = message_text.clone();
+            let msg_owned = prompt_text.clone();
 
             // Accumulate text chunks for the final artifact
             let accumulated_text = Arc::new(RwLock::new(String::new()));
@@ -1619,6 +1712,66 @@ async fn notify_telegram_chat(bot_token: &str, chat_id: i64, text: &str) {
         }))
         .send()
         .await;
+}
+
+/// Build a prompt that prepends conversation history from prior tasks in the
+/// same `context_id`.  If there is no prior history the original message is
+/// returned unchanged.
+async fn build_context_prompt(
+    task_store: &TaskStore,
+    context_id: &str,
+    current_task_id: &str,
+    message_text: &str,
+) -> String {
+    let prior_tasks = task_store.tasks_by_context(context_id).await;
+    let prior: Vec<&Task> = prior_tasks
+        .iter()
+        .filter(|t| t.id != current_task_id)
+        .collect();
+    if prior.is_empty() {
+        return message_text.to_owned();
+    }
+
+    use std::fmt::Write;
+
+    let mut history = String::from("[Previous conversation in this context]\n");
+    for task in &prior {
+        // Append user messages from history
+        if let Some(msgs) = &task.history {
+            for msg in msgs {
+                let role_label = if msg.role.contains("USER") {
+                    "User"
+                } else {
+                    "Agent"
+                };
+                let text = extract_text_from_parts(&msg.parts);
+                if !text.is_empty() {
+                    let _ = writeln!(history, "{role_label}: {text}");
+                }
+            }
+        }
+        // Append agent response from status message
+        if let Some(ref msg) = task.status.message {
+            let text = extract_text_from_parts(&msg.parts);
+            if !text.is_empty() {
+                let _ = writeln!(history, "Agent: {text}");
+            }
+        }
+    }
+    let _ = write!(history, "[Current message]\nUser: {message_text}");
+    history
+}
+
+/// Extract concatenated text from message parts.
+fn extract_text_from_parts(parts: &[Part]) -> String {
+    parts
+        .iter()
+        .filter_map(|p| match p {
+            Part::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn rpc_error(
@@ -2960,5 +3113,128 @@ mod tests {
         let body_bytes = axum::body::to_bytes(resp.into_body(), 65536).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         assert_eq!(body["result"]["tasks"].as_array().unwrap().len(), 1);
+    }
+
+    // ── context_id multi-turn conversation tests ──────────────
+
+    #[tokio::test]
+    async fn context_index_tracks_tasks() {
+        let store = TaskStore::new();
+
+        // Insert two tasks with the same context_id
+        {
+            let mut tasks = store.tasks.write().await;
+            tasks.insert(
+                "t1".into(),
+                Task {
+                    id: "t1".into(),
+                    status: TaskStatus {
+                        state: A2aTaskState::Completed,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: Some("ctx-shared".into()),
+                    artifacts: None,
+                    history: None,
+                    metadata: None,
+                },
+            );
+            tasks.insert(
+                "t2".into(),
+                Task {
+                    id: "t2".into(),
+                    status: TaskStatus {
+                        state: A2aTaskState::Working,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: Some("ctx-shared".into()),
+                    artifacts: None,
+                    history: None,
+                    metadata: None,
+                },
+            );
+            tasks.insert(
+                "t3".into(),
+                Task {
+                    id: "t3".into(),
+                    status: TaskStatus {
+                        state: A2aTaskState::Completed,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: Some("ctx-other".into()),
+                    artifacts: None,
+                    history: None,
+                    metadata: None,
+                },
+            );
+        }
+        store.index_context("ctx-shared", "t1").await;
+        store.index_context("ctx-shared", "t2").await;
+        store.index_context("ctx-other", "t3").await;
+
+        let idx = store.context_index.read().await;
+        assert_eq!(idx.get("ctx-shared").unwrap().len(), 2);
+        assert_eq!(idx.get("ctx-other").unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn tasks_by_context_returns_correct_tasks() {
+        let store = TaskStore::new();
+        {
+            let mut tasks = store.tasks.write().await;
+            for id in &["a1", "a2", "b1"] {
+                let ctx = if id.starts_with('a') {
+                    "ctx-a"
+                } else {
+                    "ctx-b"
+                };
+                tasks.insert(
+                    id.to_string(),
+                    Task {
+                        id: id.to_string(),
+                        status: TaskStatus {
+                            state: A2aTaskState::Completed,
+                            message: None,
+                            timestamp: None,
+                        },
+                        context_id: Some(ctx.into()),
+                        artifacts: None,
+                        history: None,
+                        metadata: None,
+                    },
+                );
+            }
+        }
+        store.index_context("ctx-a", "a1").await;
+        store.index_context("ctx-a", "a2").await;
+        store.index_context("ctx-b", "b1").await;
+
+        let ctx_a_tasks = store.tasks_by_context("ctx-a").await;
+        assert_eq!(ctx_a_tasks.len(), 2);
+        let ids: Vec<&str> = ctx_a_tasks.iter().map(|t| t.id.as_str()).collect();
+        assert!(ids.contains(&"a1"));
+        assert!(ids.contains(&"a2"));
+
+        let ctx_b_tasks = store.tasks_by_context("ctx-b").await;
+        assert_eq!(ctx_b_tasks.len(), 1);
+        assert_eq!(ctx_b_tasks[0].id, "b1");
+
+        let empty = store.tasks_by_context("nonexistent").await;
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn context_id_generates_consistent_session_key() {
+        let ctx = "my-context-123";
+        let session1 = format!("a2a-ctx-{ctx}");
+        let session2 = format!("a2a-ctx-{ctx}");
+        assert_eq!(session1, session2);
+        assert_eq!(session1, "a2a-ctx-my-context-123");
+
+        // Different context IDs produce different session keys
+        let other = format!("a2a-ctx-{}", "other-ctx");
+        assert_ne!(session1, other);
     }
 }

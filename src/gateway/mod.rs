@@ -1020,6 +1020,10 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/tasks", get(a2a::handle_tasks_list_rest))
         .route("/tasks/{id}", get(a2a::handle_tasks_get_rest))
         .route("/tasks/{id}:cancel", post(a2a::handle_tasks_cancel_rest))
+        .route(
+            "/tasks/by-context/{context_id}",
+            get(a2a::handle_tasks_by_context_rest),
+        )
         // v0.3 backward-compatibility (unified JSON-RPC endpoint)
         .route("/a2a", post(a2a::handle_a2a_rpc));
 
