@@ -118,12 +118,12 @@ mod verifiable_intent;
 use config::Config;
 
 // Re-export so binary modules can use crate::<CommandEnum> while keeping a single source of truth.
+#[cfg(feature = "gateway")]
+pub use hrafn::GatewayCommands;
 pub use hrafn::{
     ChannelCommands, CronCommands, HardwareCommands, IdentityCommands, IntegrationCommands,
     MigrateCommands, PeripheralCommands, ServiceCommands, SkillCommands, SopCommands,
 };
-#[cfg(feature = "gateway")]
-pub use hrafn::GatewayCommands;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 enum CompletionShell {

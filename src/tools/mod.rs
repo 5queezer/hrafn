@@ -221,9 +221,9 @@ pub use wrappers::{PathGuardedTool, RateLimitedTool};
 use crate::config::{Config, DelegateAgentConfig};
 use crate::memory::Memory;
 use crate::runtime::{NativeRuntime, RuntimeAdapter};
+use crate::security::SecurityPolicy;
 #[cfg(feature = "tool-shell")]
 use crate::security::create_sandbox;
-use crate::security::SecurityPolicy;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -313,10 +313,7 @@ pub fn default_tools_with_runtime(
         tools.insert(
             0,
             Box::new(RateLimitedTool::new(
-                PathGuardedTool::new(
-                    ShellTool::new(security.clone(), runtime),
-                    security.clone(),
-                ),
+                PathGuardedTool::new(ShellTool::new(security.clone(), runtime), security.clone()),
                 security.clone(),
             )),
         );

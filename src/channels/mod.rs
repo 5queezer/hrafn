@@ -4522,8 +4522,7 @@ fn collect_configured_channels(
     }
 
     #[cfg(not(feature = "channel-discord"))]
-    if config.channels_config.discord.is_some()
-        || config.channels_config.discord_history.is_some()
+    if config.channels_config.discord.is_some() || config.channels_config.discord_history.is_some()
     {
         tracing::warn!(
             "Discord channel is configured but this build was compiled without \
