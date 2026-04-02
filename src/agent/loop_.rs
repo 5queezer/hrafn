@@ -4720,6 +4720,7 @@ pub async fn process_message(
         ));
     }
 
+    #[cfg(feature = "tool-a2a")]
     if config.a2a.enabled {
         tool_descs.push((
             "a2a",

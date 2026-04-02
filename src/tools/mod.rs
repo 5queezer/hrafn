@@ -1042,6 +1042,14 @@ pub fn all_tools_with_runtime(
         )));
     }
 
+    #[cfg(not(feature = "tool-a2a"))]
+    if root_config.a2a.enabled {
+        tracing::warn!(
+            "A2A protocol is enabled in config but this build was compiled without \
+             the `tool-a2a` feature; A2A tool and routes will not be available."
+        );
+    }
+
     // ── WASM plugin tools (requires plugins-wasm feature) ──
     #[cfg(feature = "plugins-wasm")]
     {
@@ -1126,7 +1134,10 @@ mod tests {
     fn default_tools_has_expected_count() {
         let security = Arc::new(SecurityPolicy::default());
         let tools = default_tools(security);
+        #[cfg(feature = "tool-shell")]
         assert_eq!(tools.len(), 6);
+        #[cfg(not(feature = "tool-shell"))]
+        assert_eq!(tools.len(), 5);
     }
 
     #[test]
@@ -1220,6 +1231,7 @@ mod tests {
         let security = Arc::new(SecurityPolicy::default());
         let tools = default_tools(security);
         let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+        #[cfg(feature = "tool-shell")]
         assert!(names.contains(&"shell"));
         assert!(names.contains(&"file_read"));
         assert!(names.contains(&"file_write"));

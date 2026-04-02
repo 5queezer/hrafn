@@ -62,7 +62,7 @@ pub mod cron;
 pub(crate) mod daemon;
 #[cfg(feature = "desktop")]
 pub(crate) mod doctor;
-#[cfg(feature = "gateway")]
+#[cfg(feature = "desktop")]
 pub mod gateway;
 #[cfg(feature = "desktop")]
 pub mod hands;
