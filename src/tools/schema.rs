@@ -547,12 +547,19 @@ impl SchemaCleanr {
             )
         };
 
-        // Merge properties: first definition wins on collision
+        // Merge properties — bail on type conflicts so the caller can try a
+        // less aggressive simplification (e.g. picking the richest variant).
         let mut merged_props: Map<String, Value> = Map::new();
         for variant in variants {
             if let Some(Value::Object(props)) = variant.get("properties") {
                 for (k, v) in props {
-                    merged_props.entry(k.clone()).or_insert_with(|| v.clone());
+                    if let Some(existing) = merged_props.get(k) {
+                        if existing != v {
+                            return None; // conflicting definitions for the same key
+                        }
+                    } else {
+                        merged_props.insert(k.clone(), v.clone());
+                    }
                 }
             }
         }
@@ -690,11 +697,22 @@ impl SchemaCleanr {
         if all_objects {
             let mut merged_props: Map<String, Value> = Map::new();
             let mut all_required: HashSet<String> = HashSet::new();
+            let mut has_conflict = false;
 
             for variant in &effective {
                 if let Some(Value::Object(props)) = variant.get("properties") {
                     for (k, v) in props {
-                        merged_props.entry(k.clone()).or_insert_with(|| v.clone());
+                        if let Some(existing) = merged_props.get(k) {
+                            if existing != v {
+                                has_conflict = true;
+                                break;
+                            }
+                        } else {
+                            merged_props.insert(k.clone(), v.clone());
+                        }
+                    }
+                    if has_conflict {
+                        break;
                     }
                 }
                 if let Some(Value::Array(req)) = variant.get("required") {
@@ -706,18 +724,20 @@ impl SchemaCleanr {
                 }
             }
 
-            let mut result = Map::new();
-            result.insert("type".to_string(), json!("object"));
-            if !merged_props.is_empty() {
-                result.insert("properties".to_string(), Value::Object(merged_props));
+            if !has_conflict {
+                let mut result = Map::new();
+                result.insert("type".to_string(), json!("object"));
+                if !merged_props.is_empty() {
+                    result.insert("properties".to_string(), Value::Object(merged_props));
+                }
+                if !all_required.is_empty() {
+                    let mut req_vec: Vec<String> = all_required.into_iter().collect();
+                    req_vec.sort();
+                    let req_vec: Vec<Value> = req_vec.into_iter().map(Value::String).collect();
+                    result.insert("required".to_string(), Value::Array(req_vec));
+                }
+                return Some(Self::preserve_meta(obj, Value::Object(result)));
             }
-            if !all_required.is_empty() {
-                let mut req_vec: Vec<String> = all_required.into_iter().collect();
-                req_vec.sort();
-                let req_vec: Vec<Value> = req_vec.into_iter().map(Value::String).collect();
-                result.insert("required".to_string(), Value::Array(req_vec));
-            }
-            return Some(Self::preserve_meta(obj, Value::Object(result)));
         }
 
         // Heterogeneous allOf — key-level merge, first definition wins on collision.
@@ -1330,5 +1350,34 @@ mod tests {
 
         assert_eq!(cleaned["not"]["type"], "integer");
         assert!(cleaned["not"].get("minimum").is_none());
+    }
+
+    #[test]
+    fn clean_for_gemini_bails_on_conflicting_property_types() {
+        let schema = json!({
+            "anyOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "value": { "type": "string" }
+                    },
+                    "required": ["value"]
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "value": { "type": "integer" }
+                    },
+                    "required": ["value"]
+                }
+            ]
+        });
+        let cleaned = SchemaCleanr::clean_for_gemini(schema);
+        let obj = cleaned.as_object().unwrap();
+        // Should NOT produce an anyOf (Gemini doesn't support it),
+        // but should not silently merge conflicting types either.
+        // Fallback picks the richest variant or builds a best-effort object.
+        assert!(obj.get("anyOf").is_none(), "Gemini must not emit anyOf");
+        assert_eq!(obj.get("type").unwrap(), "object");
     }
 }

@@ -1399,6 +1399,13 @@ fn parse_tool_calls(response: &str) -> (String, Vec<ParsedToolCall>) {
         }
     }
 
+    // --- JSONL recovery pass ---
+    // Safety: by the time parse_tool_calls runs, `response` is a complete
+    // string (not a streaming chunk). The Gemini/OpenRouter JSONL format
+    // emits one JSON object per line by definition. If a response were
+    // pretty-printed across lines, the per-line parse would fail harmlessly
+    // and fall through to the XML/other parsers below.
+    //
     // Gemini via OpenRouter sometimes returns multiple JSON objects separated by
     // newlines (JSONL) — e.g. one line with tool_calls and a follow-up line with
     // tool_code. Only match lines that carry both "content" and "tool_calls" keys
