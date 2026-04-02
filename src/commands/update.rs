@@ -49,7 +49,12 @@ pub async fn check(target_version: Option<&str>) -> Result<UpdateInfo> {
     if !status.is_success() {
         if status == reqwest::StatusCode::NOT_FOUND {
             if let Some(v) = target_version {
-                bail!("release tag '{v}' not found on GitHub — check that the tag is published");
+                let tag = if v.starts_with('v') {
+                    v.to_string()
+                } else {
+                    format!("v{v}")
+                };
+                bail!("release tag '{tag}' not found on GitHub — check that the tag is published");
             }
             bail!("no releases found — publish a release on GitHub first, or build from source");
         }
