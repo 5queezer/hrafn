@@ -84,14 +84,29 @@ Hrafn's architecture is **trait-based**. Every subsystem is a Rust trait. Swap i
 
 ```
 src/
-├── providers/    # LLM backends       → Provider trait
-├── channels/     # Messaging           → Channel trait
-├── tools/        # Agent capabilities  → Tool trait
-├── memory/       # Persistence         → Memory trait
-├── gateway/      # HTTP/WS control plane
-├── agent/        # Orchestration loop
-└── config/       # TOML configuration
-
+├── agent/         # Orchestration loop
+├── config/        # TOML configuration
+├── providers/     # LLM backends          → Provider trait
+├── channels/      # Messaging platforms    → Channel trait
+├── tools/         # Agent capabilities     → Tool trait
+├── memory/        # Persistence            → Memory trait
+├── gateway/       # HTTP/WS control plane
+├── security/      # Policy, secrets, audit
+├── hardware/      # Device discovery, I2C/SPI/GPIO
+├── peripherals/   # Peripheral management  → Peripheral trait
+├── runtime/       # Runtime adapters       → RuntimeAdapter trait
+├── observability/ # Metrics, tracing
+├── plugins/       # WASM plugin runtime
+├── daemon/        # Background service
+├── skills/        # Skill management
+├── rag/           # Retrieval-augmented generation
+├── hooks/         # Lifecycle hooks
+├── cron/          # Scheduled tasks
+├── identity/      # Identity management
+├── tunnel/        # Tunnel/relay support
+└── ...            # approval, auth, commands, cost, doctor, hands, health,
+                   # heartbeat, integrations, nodes, onboard, routines,
+                   # service, skillforge, sop, trust, verifiable_intent
 ```
 
 ### Compile-time modularity
