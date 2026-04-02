@@ -76,8 +76,8 @@ hrafn doctor
 # Full default build (all channels, tools, gateway, metrics)
 cargo build --release --locked
 
-# Headless gateway-only build (no CLI interactive deps)
-cargo build --no-default-features --features "gateway,channel-telegram,tool-shell,memory-muninndb"
+# Selective channels: only Telegram + shell, no Matrix/Nostr/WhatsApp
+cargo build --no-default-features --features "desktop,channel-telegram,tool-shell"
 
 # Stripped-down ESP32 build (no CLI, no gateway, no optional channels)
 cargo build --bin hrafn-esp32 --no-default-features --features target-esp32
