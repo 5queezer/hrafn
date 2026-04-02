@@ -241,8 +241,7 @@ impl SchemaCleanr {
         // Build cleaned object
         let mut cleaned = Map::new();
         let unsupported: HashSet<&str> = strategy.unsupported_keywords().iter().copied().collect();
-        let has_union =
-            obj.contains_key("anyOf") || obj.contains_key("oneOf") || obj.contains_key("allOf");
+        let has_union = obj.contains_key("anyOf") || obj.contains_key("oneOf");
 
         for (key, value) in obj {
             // Skip unsupported keywords
@@ -256,7 +255,8 @@ impl SchemaCleanr {
                 "const" => {
                     cleaned.insert("enum".to_string(), json!([value]));
                 }
-                // Skip type if we have anyOf/oneOf (they define the type)
+                // Skip type for disjunction unions (anyOf/oneOf) — they define the type.
+                // allOf is conjunctive and must not suppress top-level type.
                 "type" if has_union => {
                     // Skip
                 }
@@ -1379,5 +1379,29 @@ mod tests {
         // Fallback picks the richest variant or builds a best-effort object.
         assert!(obj.get("anyOf").is_none(), "Gemini must not emit anyOf");
         assert_eq!(obj.get("type").unwrap(), "object");
+    }
+
+    #[test]
+    fn clean_for_openai_preserves_type_with_allof() {
+        let schema = json!({
+            "type": "object",
+            "allOf": [
+                {
+                    "properties": {
+                        "name": { "type": "string" }
+                    }
+                },
+                {
+                    "properties": {
+                        "age": { "type": "integer" }
+                    }
+                }
+            ]
+        });
+        let cleaned = SchemaCleanr::clean_for_openai(schema);
+        let obj = cleaned.as_object().unwrap();
+        // type must be preserved — allOf is conjunctive, not disjunctive
+        assert_eq!(obj.get("type").unwrap(), "object");
+        assert!(obj.get("allOf").is_some());
     }
 }
