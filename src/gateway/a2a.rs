@@ -1552,7 +1552,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tasks_cancel_idempotent_on_already_canceled() {
+    async fn tasks_cancel_rejects_already_canceled_task() {
         let store = Arc::new(TaskStore::new());
         {
             let mut tasks = store.tasks.write().await;
