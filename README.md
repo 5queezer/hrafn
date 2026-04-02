@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/5queezer/hrafn/actions/workflows/ci-run.yml"><img src="https://github.com/5queezer/hrafn/actions/workflows/ci-run.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
+  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg" alt="License"></a>
   <a href="https://github.com/5queezer/hrafn/releases"><img src="https://img.shields.io/github/v/release/5queezer/hrafn?include_prereleases" alt="Release"></a>
 </p>
 
@@ -73,9 +73,14 @@ hrafn doctor
 ### Minimal feature build
 
 ```bash
-# Only Telegram + shell tool + default memory
-cargo build --release --no-default-features \
-  --features "channel-telegram,tool-shell"
+# Full default build (all channels, tools, gateway, metrics)
+cargo build --release --locked
+
+# Headless gateway-only build (no CLI interactive deps)
+cargo build --no-default-features --features "gateway,channel-telegram,tool-shell,memory-muninndb"
+
+# Stripped-down ESP32 build (no CLI, no gateway, no optional channels)
+cargo build --bin hrafn-esp32 --no-default-features --features target-esp32
 ```
 
 ## Architecture
@@ -84,43 +89,62 @@ Hrafn's architecture is **trait-based**. Every subsystem is a Rust trait. Swap i
 
 ```
 src/
-├── providers/    # LLM backends       → Provider trait
-├── channels/     # Messaging           → Channel trait
-├── tools/        # Agent capabilities  → Tool trait
-├── memory/       # Persistence         → Memory trait
-├── gateway/      # HTTP/WS control plane
-├── agent/        # Orchestration loop
-└── config/       # TOML configuration
-
+├── providers/      # LLM backends         → Provider trait
+├── channels/       # Messaging            → Channel trait
+├── tools/          # Agent capabilities   → Tool trait
+├── memory/         # Persistence          → Memory trait
+├── gateway/        # HTTP/WS control plane
+├── agent/          # Orchestration loop
+├── config/         # TOML configuration
+├── security/       # Policy, pairing, secret store
+├── observability/  # Metrics + tracing backends
+├── peripherals/    # Hardware peripherals (STM32, RPi GPIO)
+└── hardware/       # USB/serial device discovery
 ```
 
 ### Compile-time modularity
 
-Every channel, tool, provider, and memory backend is gated behind a Cargo feature:
+Every channel, tool, and subsystem is gated behind a Cargo feature. The `desktop` feature bundles everything needed for a full CLI build; opt-in features add extra backends.
 
-```toml
-[features]
-default = ["channel-telegram", "tool-shell", "gateway"]
+| Feature | Default | Description |
+|---|---|---|
+| `desktop` | Yes | Full CLI + interactive features (depends on `gateway`) |
+| `gateway` | Yes | HTTP/WebSocket gateway server (axum/hyper/tower) |
+| **Channels** | | |
+| `channel-telegram` | Yes | Telegram bot channel |
+| `channel-discord` | Yes | Discord bot channel |
+| `channel-whatsapp` | Yes | WhatsApp Cloud API channel |
+| `channel-signal` | Yes | Signal messenger channel |
+| `channel-matrix` | No | Matrix/Element E2EE channel |
+| `channel-nostr` | No | Nostr protocol channel |
+| `channel-lark` | No | Lark/Feishu channel |
+| `channel-feishu` | No | Alias for `channel-lark` |
+| `whatsapp-web` | No | Native WhatsApp Web client (wa-rs) |
+| **Tools** | | |
+| `tool-shell` | Yes | Shell command execution tool |
+| `tool-a2a` | Yes | Agent-to-Agent protocol tool + gateway routes |
+| **Memory** | | |
+| `memory-muninndb` | Yes | MuninnDB memory backend |
+| **Observability** | | |
+| `observability-prometheus` | Yes | Prometheus metrics |
+| `observability-otel` | No | OpenTelemetry tracing |
+| **Hardware** | | |
+| `hardware` | No | USB device discovery + serial |
+| `peripheral-rpi` | No | Raspberry Pi GPIO |
+| `probe` | No | probe-rs debug probe support |
+| **Sandbox** | | |
+| `sandbox-landlock` | No | Linux Landlock sandboxing |
+| `sandbox-bubblewrap` | No | Bubblewrap sandboxing |
+| **Other** | | |
+| `browser-native` | No | Fantoccini WebDriver backend |
+| `voice-wake` | No | Voice wake word detection |
+| `plugins-wasm` | No | WASM plugin runtime (extism) |
+| `skill-creation` | Yes | Autonomous skill creation |
+| `rag-pdf` | No | PDF ingestion for RAG |
+| `webauthn` | No | WebAuthn/FIDO2 auth |
+| `target-esp32` | No | Stripped-down ESP32-S3 build |
 
-# Channels
-channel-telegram = []
-channel-discord = []
-channel-whatsapp = []
-channel-signal = []
-channel-matrix = []
-
-# Tools
-tool-shell = []
-tool-a2a = []
-tool-browser = []
-
-# Memory
-memory-muninndb = ["dep:muninndb"]
-
-# Infrastructure
-gateway = []
-
-```
+Use `--no-default-features` and opt in to individual features for minimal builds. Configuring a disabled module logs a warning at startup.
 
 ### Runtime extensibility
 
@@ -145,8 +169,6 @@ OC Plugin → MCP Adapter (Node.js) → Hrafn tests it → Community validates
   → Port Queue → Native Rust implementation → Review & merge
 ```
 
-See `docs/oc-bridge.md` for setup.
-
 ## Key Integrations
 
 ### MuninnDB
@@ -158,9 +180,9 @@ Cognitive memory backend with Ebbinghaus-curve decay (memories fade naturally) a
 backend = "muninndb"
 
 [memory.muninndb]
-db_path = "~/.hrafn/memory"
-consolidation = true
-ollama_model = "llama3.2"
+url = "http://127.0.0.1:8475"
+vault = "default"
+# api_key = "your-key"  # optional, for secured instances
 ```
 
 ### A2A Protocol
@@ -170,8 +192,8 @@ Native Agent-to-Agent communication per the open [A2A standard](https://github.c
 ```toml
 [a2a]
 enabled = true
-bind = "127.0.0.1:18800"    # localhost-only by default
 bearer_token = "your-secret"
+# public_url = "https://agent.example.com"  # auto-derived from gateway if omitted
 ```
 
 Inbound tasks route through the existing agent pipeline. The agent card is auto-generated from your configuration.
@@ -200,6 +222,6 @@ Hrafn originated as a fork of [ZeroClaw](https://github.com/zeroclaw-labs/zerocl
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE). You retain copyright of your contributions.
+MIT OR Apache-2.0. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE). You retain copyright of your contributions.
 
 **`memory-muninndb` feature gate:** Enabling this feature pulls in [MuninnDB](https://github.com/5queezer/muninndb), which is licensed under BSL 1.1 (not open source) and patent pending (U.S. Provisional Application No. 63/991,402). Commercial use of MuninnDB requires a separate license. See [muninndb.com](https://muninndb.com) for details.
