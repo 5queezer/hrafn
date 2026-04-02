@@ -244,6 +244,8 @@ impl A2aTool {
         page_token: Option<&str>,
         context_id: Option<&str>,
         status: Option<&str>,
+        history_length: Option<u64>,
+        include_artifacts: Option<bool>,
     ) -> anyhow::Result<ToolResult> {
         let mut list_url = self.validate_url(url)?;
         list_url
@@ -264,6 +266,12 @@ impl A2aTool {
             }
             if let Some(s) = status {
                 query.append_pair("status", s);
+            }
+            if let Some(hl) = history_length {
+                query.append_pair("history_length", &hl.to_string());
+            }
+            if let Some(ia) = include_artifacts {
+                query.append_pair("include_artifacts", &ia.to_string());
             }
         }
 
@@ -385,6 +393,14 @@ impl Tool for A2aTool {
                 "status": {
                     "type": "string",
                     "description": "Filter tasks by status, e.g. TASK_STATE_COMPLETED (for list action)"
+                },
+                "history_length": {
+                    "type": "integer",
+                    "description": "Max conversation history entries to include per task (for list action)"
+                },
+                "include_artifacts": {
+                    "type": "boolean",
+                    "description": "Include artifact data in listed tasks (for list action)"
                 }
             },
             "required": ["action", "url"]
@@ -492,6 +508,8 @@ impl Tool for A2aTool {
                 let page_token = args.get("page_token").and_then(|v| v.as_str());
                 let context_id = args.get("context_id").and_then(|v| v.as_str());
                 let status = args.get("status").and_then(|v| v.as_str());
+                let history_length = args.get("history_length").and_then(|v| v.as_u64());
+                let include_artifacts = args.get("include_artifacts").and_then(|v| v.as_bool());
                 self.action_list(
                     &url,
                     bearer_token.as_deref(),
@@ -499,6 +517,8 @@ impl Tool for A2aTool {
                     page_token,
                     context_id,
                     status,
+                    history_length,
+                    include_artifacts,
                 )
                 .await
             }

@@ -865,6 +865,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             Arc::clone(&task_store),
             config.a2a.task_ttl_secs,
             config.a2a.eviction_interval_secs,
+            shutdown_tx.subscribe(),
         );
 
         (Some(Arc::new(card)), Some(task_store))
