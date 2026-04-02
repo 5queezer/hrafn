@@ -631,10 +631,21 @@ async fn handle_message_send(
                 metadata: None,
             };
 
-            {
+            // Only write the result if the task hasn't been canceled in the
+            // meantime. This prevents a cancel→completed race where the
+            // synchronous agent pipeline overwrites a Canceled state.
+            let task = {
                 let mut tasks = task_store.tasks.write().await;
-                tasks.insert(task_id.clone(), task.clone());
-            }
+                if tasks
+                    .get(&task_id)
+                    .is_some_and(|t| t.status.state == A2aTaskState::Canceled)
+                {
+                    tasks.get(&task_id).cloned().unwrap()
+                } else {
+                    tasks.insert(task_id.clone(), task.clone());
+                    task
+                }
+            };
 
             (
                 StatusCode::OK,
@@ -672,10 +683,19 @@ async fn handle_message_send(
                 metadata: None,
             };
 
-            {
+            // Preserve Canceled state — don't overwrite with Failed.
+            let task = {
                 let mut tasks = task_store.tasks.write().await;
-                tasks.insert(task_id.clone(), task.clone());
-            }
+                if tasks
+                    .get(&task_id)
+                    .is_some_and(|t| t.status.state == A2aTaskState::Canceled)
+                {
+                    tasks.get(&task_id).cloned().unwrap()
+                } else {
+                    tasks.insert(task_id.clone(), task.clone());
+                    task
+                }
+            };
 
             (
                 StatusCode::OK,
@@ -1342,7 +1362,7 @@ mod tests {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: json!(42),
-            method: "tasks/cancel".into(),
+            method: "tasks/unknown".into(),
             params: json!({}),
         };
         let resp = handle_a2a_rpc(State(state), HeaderMap::new(), Json(req))

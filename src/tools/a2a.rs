@@ -1,7 +1,7 @@
 //! # A2A Tool — MVP Implementation
 //!
 //! Client-side tool for interacting with remote A2A agents.
-//! Supports: `discover`, `send`, `status`, `result` (polling).
+//! Supports: `discover`, `send`, `status`, `result` (polling), `cancel`.
 //!
 //! **Not yet implemented:** streaming (`message/stream`),
 //! multi-turn conversations, structured/binary message parts.
