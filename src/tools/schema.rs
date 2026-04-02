@@ -241,8 +241,7 @@ impl SchemaCleanr {
         // Build cleaned object
         let mut cleaned = Map::new();
         let unsupported: HashSet<&str> = strategy.unsupported_keywords().iter().copied().collect();
-        let has_union =
-            obj.contains_key("anyOf") || obj.contains_key("oneOf") || obj.contains_key("allOf");
+        let has_union = obj.contains_key("anyOf") || obj.contains_key("oneOf");
 
         for (key, value) in obj {
             // Skip unsupported keywords
