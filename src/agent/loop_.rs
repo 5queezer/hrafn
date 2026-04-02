@@ -3520,6 +3520,7 @@ pub async fn run(
     let security = Arc::new(SecurityPolicy::from_config(
         &config.autonomy,
         &config.workspace_dir,
+        config.security.enabled,
     ));
 
     // ── Memory (the brain) ────────────────────────────────────────
@@ -4503,6 +4504,7 @@ pub async fn process_message(
     let security = Arc::new(SecurityPolicy::from_config(
         &config.autonomy,
         &config.workspace_dir,
+        config.security.enabled,
     ));
     let approval_manager = ApprovalManager::for_non_interactive(&config.autonomy);
     let mem: Arc<dyn Memory> = Arc::from(memory::create_memory_with_storage_and_routes(
@@ -8019,6 +8021,7 @@ Tail"#;
         let security = Arc::new(SecurityPolicy::from_config(
             &crate::config::AutonomyConfig::default(),
             std::path::Path::new("/tmp"),
+            true,
         ));
         let tools = tools::default_tools(security);
         let instructions = build_tool_instructions(&tools, None);
@@ -8036,6 +8039,7 @@ Tail"#;
         let security = Arc::new(SecurityPolicy::from_config(
             &crate::config::AutonomyConfig::default(),
             std::path::Path::new("/tmp"),
+            true,
         ));
         let tools = tools::default_tools(security);
         let formatted = tools_to_openai_format(&tools);
