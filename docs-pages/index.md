@@ -2,8 +2,6 @@
 title: Hrafn Docs
 ---
 
-# Hrafn Docs
-
 This GitHub Pages site publishes the repository documentation as a static site.
 
 - Start at the [documentation hub](docs/README.md)
