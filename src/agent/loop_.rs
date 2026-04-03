@@ -4720,6 +4720,7 @@ pub async fn process_message(
         ));
     }
 
+    #[cfg(feature = "tool-a2a")]
     if config.a2a.enabled {
         tool_descs.push((
             "a2a",
@@ -6631,6 +6632,7 @@ mod tests {
         assert!(tool_results.content.contains("Skipped duplicate tool call"));
     }
 
+    #[cfg(feature = "tool-shell")]
     #[tokio::test]
     async fn run_tool_call_loop_allows_low_risk_shell_in_non_interactive_mode() {
         let provider = ScriptedProvider::from_text_responses(vec![

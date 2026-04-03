@@ -2189,12 +2189,15 @@ mod tests {
             trust_forwarded_headers: false,
             rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100, 100)),
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300), 1000)),
+            #[cfg(feature = "channel-whatsapp")]
             whatsapp: None,
+            #[cfg(feature = "channel-whatsapp")]
             whatsapp_app_secret: None,
             linq: None,
             linq_signing_secret: None,
             nextcloud_talk: None,
             nextcloud_talk_webhook_secret: None,
+            #[cfg(feature = "channel-whatsapp")]
             wati: None,
             gmail_push: None,
             observer: Arc::new(crate::observability::NoopObserver),

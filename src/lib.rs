@@ -128,7 +128,7 @@ pub mod plugins;
 pub use config::Config;
 
 /// Gateway management subcommands
-#[cfg(feature = "desktop")]
+#[cfg(all(feature = "desktop", feature = "gateway"))]
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GatewayCommands {
     /// Start the gateway server (default if no subcommand specified)

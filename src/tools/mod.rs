@@ -15,6 +15,7 @@
 //! To add a new tool, implement [`Tool`] in a new submodule and register it in
 //! [`all_tools_with_runtime`]. See `AGENTS.md` §7.3 for the full change playbook.
 
+#[cfg(feature = "tool-a2a")]
 pub mod a2a;
 pub mod ask_user;
 pub mod backup_tool;
@@ -94,6 +95,7 @@ pub mod schema;
 pub mod screenshot;
 pub mod security_ops;
 pub mod sessions;
+#[cfg(feature = "tool-shell")]
 pub mod shell;
 pub mod skill_http;
 pub mod skill_tool;
@@ -191,6 +193,7 @@ pub use schema::{CleaningStrategy, SchemaCleanr};
 pub use screenshot::ScreenshotTool;
 pub use security_ops::SecurityOpsTool;
 pub use sessions::{SessionsHistoryTool, SessionsListTool, SessionsSendTool};
+#[cfg(feature = "tool-shell")]
 pub use shell::ShellTool;
 #[allow(unused_imports)]
 pub use skill_http::SkillHttpTool;
@@ -212,12 +215,15 @@ pub use weather_tool::WeatherTool;
 pub use web_fetch::WebFetchTool;
 pub use web_search_tool::WebSearchTool;
 pub use workspace_tool::WorkspaceTool;
+#[allow(unused_imports)]
 pub use wrappers::{PathGuardedTool, RateLimitedTool};
 
 use crate::config::{Config, DelegateAgentConfig};
 use crate::memory::Memory;
 use crate::runtime::{NativeRuntime, RuntimeAdapter};
-use crate::security::{SecurityPolicy, create_sandbox};
+use crate::security::SecurityPolicy;
+#[cfg(feature = "tool-shell")]
+use crate::security::create_sandbox;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -293,17 +299,26 @@ pub fn default_tools_with_runtime(
     security: Arc<SecurityPolicy>,
     runtime: Arc<dyn RuntimeAdapter>,
 ) -> Vec<Box<dyn Tool>> {
-    vec![
-        Box::new(RateLimitedTool::new(
-            PathGuardedTool::new(ShellTool::new(security.clone(), runtime), security.clone()),
-            security.clone(),
-        )),
+    let _ = &runtime; // used only when tool-shell is enabled
+    #[allow(unused_mut)]
+    let mut tools: Vec<Box<dyn Tool>> = vec![
         Box::new(FileReadTool::new(security.clone())),
         Box::new(FileWriteTool::new(security.clone())),
         Box::new(FileEditTool::new(security.clone())),
         Box::new(GlobSearchTool::new(security.clone())),
-        Box::new(ContentSearchTool::new(security)),
-    ]
+        Box::new(ContentSearchTool::new(security.clone())),
+    ];
+    #[cfg(feature = "tool-shell")]
+    {
+        tools.insert(
+            0,
+            Box::new(RateLimitedTool::new(
+                PathGuardedTool::new(ShellTool::new(security.clone(), runtime), security.clone()),
+                security.clone(),
+            )),
+        );
+    }
+    tools
 }
 
 /// Register skill-defined tools into an existing tool registry.
@@ -409,17 +424,7 @@ pub fn all_tools_with_runtime(
     Option<ChannelMapHandle>,
 ) {
     let has_shell_access = runtime.has_shell_access();
-    let sandbox = create_sandbox(&root_config.security);
     let mut tool_arcs: Vec<Arc<dyn Tool>> = vec![
-        Arc::new(RateLimitedTool::new(
-            PathGuardedTool::new(
-                ShellTool::new_with_sandbox(security.clone(), runtime, sandbox)
-                    .with_timeout_secs(root_config.shell_tool.timeout_secs)
-                    .with_process_limits(root_config.security.process_limits.clone()),
-                security.clone(),
-            ),
-            security.clone(),
-        )),
         Arc::new(FileReadTool::new(security.clone())),
         Arc::new(FileWriteTool::new(security.clone())),
         Arc::new(FileEditTool::new(security.clone())),
@@ -455,6 +460,23 @@ pub fn all_tools_with_runtime(
         Arc::new(WeatherTool::new()),
         Arc::new(CanvasTool::new(canvas_store.unwrap_or_default())),
     ];
+
+    #[cfg(feature = "tool-shell")]
+    {
+        let sandbox = create_sandbox(&root_config.security);
+        tool_arcs.insert(
+            0,
+            Arc::new(RateLimitedTool::new(
+                PathGuardedTool::new(
+                    ShellTool::new_with_sandbox(security.clone(), runtime, sandbox)
+                        .with_timeout_secs(root_config.shell_tool.timeout_secs)
+                        .with_process_limits(root_config.security.process_limits.clone()),
+                    security.clone(),
+                ),
+                security.clone(),
+            )),
+        );
+    }
 
     // Register discord_search if discord_history channel is configured
     if root_config.channels_config.discord_history.is_some() {
@@ -1003,6 +1025,7 @@ pub fn all_tools_with_runtime(
     }
 
     // A2A (Agent-to-Agent) outbound client tool
+    #[cfg(feature = "tool-a2a")]
     if root_config.a2a.enabled {
         // Allow localhost A2A when public_url points to a local address
         // (same-host multi-instance setup).
@@ -1017,6 +1040,14 @@ pub fn all_tools_with_runtime(
             30,
             allow_local,
         )));
+    }
+
+    #[cfg(not(feature = "tool-a2a"))]
+    if root_config.a2a.enabled {
+        tracing::warn!(
+            "A2A protocol is enabled in config but this build was compiled without \
+             the `tool-a2a` feature; A2A tool and routes will not be available."
+        );
     }
 
     // ── WASM plugin tools (requires plugins-wasm feature) ──
@@ -1103,7 +1134,10 @@ mod tests {
     fn default_tools_has_expected_count() {
         let security = Arc::new(SecurityPolicy::default());
         let tools = default_tools(security);
+        #[cfg(feature = "tool-shell")]
         assert_eq!(tools.len(), 6);
+        #[cfg(not(feature = "tool-shell"))]
+        assert_eq!(tools.len(), 5);
     }
 
     #[test]
@@ -1197,6 +1231,7 @@ mod tests {
         let security = Arc::new(SecurityPolicy::default());
         let tools = default_tools(security);
         let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+        #[cfg(feature = "tool-shell")]
         assert!(names.contains(&"shell"));
         assert!(names.contains(&"file_read"));
         assert!(names.contains(&"file_write"));

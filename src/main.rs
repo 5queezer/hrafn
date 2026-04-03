@@ -85,6 +85,7 @@ mod cost;
 mod cron;
 mod daemon;
 mod doctor;
+#[cfg(feature = "gateway")]
 mod gateway;
 mod hardware;
 mod health;
@@ -117,10 +118,11 @@ mod verifiable_intent;
 use config::Config;
 
 // Re-export so binary modules can use crate::<CommandEnum> while keeping a single source of truth.
+#[cfg(feature = "gateway")]
+pub use hrafn::GatewayCommands;
 pub use hrafn::{
-    ChannelCommands, CronCommands, GatewayCommands, HardwareCommands, IdentityCommands,
-    IntegrationCommands, MigrateCommands, PeripheralCommands, ServiceCommands, SkillCommands,
-    SopCommands,
+    ChannelCommands, CronCommands, HardwareCommands, IdentityCommands, IntegrationCommands,
+    MigrateCommands, PeripheralCommands, ServiceCommands, SkillCommands, SopCommands,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -237,6 +239,7 @@ Examples:
     },
 
     /// Start/manage the gateway server (webhooks, websockets)
+    #[cfg(feature = "gateway")]
     #[command(long_about = "\
 Manage the gateway server (webhooks, websockets).
 
@@ -1071,6 +1074,7 @@ async fn main() -> Result<()> {
             server.run().await
         }
 
+        #[cfg(feature = "gateway")]
         Commands::Gateway { gateway_command } => {
             match gateway_command {
                 Some(hrafn::GatewayCommands::Restart { port, host }) => {
@@ -1943,6 +1947,7 @@ fn write_shell_completion<W: Write>(shell: CompletionShell, writer: &mut W) -> R
 // ─── Gateway helper functions ───────────────────────────────────────────────
 
 /// Resolve gateway host and port from CLI args or config.
+#[cfg(feature = "gateway")]
 fn resolve_gateway_addr(config: &Config, port: Option<u16>, host: Option<String>) -> (u16, String) {
     let port = port.unwrap_or(config.gateway.port);
     let host = host.unwrap_or_else(|| config.gateway.host.clone());
@@ -1950,6 +1955,7 @@ fn resolve_gateway_addr(config: &Config, port: Option<u16>, host: Option<String>
 }
 
 /// Log gateway startup message.
+#[cfg(feature = "gateway")]
 fn log_gateway_start(host: &str, port: u16) {
     if port == 0 {
         info!("🚀 Starting Hrafn Gateway on {host} (random port)");
@@ -1959,6 +1965,7 @@ fn log_gateway_start(host: &str, port: u16) {
 }
 
 /// Gracefully shutdown a running gateway via the admin endpoint.
+#[cfg(feature = "gateway")]
 async fn shutdown_gateway(host: &str, port: u16) -> Result<()> {
     let url = format!("http://{host}:{port}/admin/shutdown");
     let client = reqwest::Client::new();
@@ -1980,6 +1987,7 @@ async fn shutdown_gateway(host: &str, port: u16) -> Result<()> {
 
 /// Fetch the current pairing code from a running gateway.
 /// If `new` is true, generates a fresh pairing code via POST request.
+#[cfg(feature = "gateway")]
 async fn fetch_paircode(host: &str, port: u16, new: bool) -> Result<Option<String>> {
     let client = reqwest::Client::new();
 
