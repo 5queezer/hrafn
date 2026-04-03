@@ -116,12 +116,12 @@ pub async fn check(target_version: Option<&str>, include_pre: bool) -> Result<Up
 ///
 /// If `target_version` is `Some`, fetch that specific version instead of latest.
 /// If `include_pre` is true, pre-releases are considered when picking the latest.
-pub async fn run(target_version: Option<&str>, include_pre: bool) -> Result<()> {
+pub async fn run(target_version: Option<&str>, include_pre: bool, force: bool) -> Result<()> {
     // Phase 1: Preflight
     info!("Phase 1/6: Preflight checks...");
     let update_info = check(target_version, include_pre).await?;
 
-    if !update_info.is_newer {
+    if !update_info.is_newer && !force {
         println!("Already up to date (v{}).", update_info.current_version);
         return Ok(());
     }
@@ -131,10 +131,28 @@ pub async fn run(target_version: Option<&str>, include_pre: bool) -> Result<()> 
     } else {
         ""
     };
-    println!(
-        "Update available: v{} -> v{}{}",
-        update_info.current_version, update_info.latest_version, pre_tag
-    );
+    if force && !update_info.is_newer {
+        let current_base = strip_git_describe(&update_info.current_version);
+        let latest_base = strip_git_describe(&update_info.latest_version);
+        if current_base == latest_base {
+            println!("Reinstalling v{}{}", update_info.current_version, pre_tag);
+        } else {
+            println!(
+                "Forcing downgrade: v{} -> v{}{}",
+                update_info.current_version, update_info.latest_version, pre_tag
+            );
+        }
+    } else if force {
+        println!(
+            "Forcing update: v{} -> v{}{}",
+            update_info.current_version, update_info.latest_version, pre_tag
+        );
+    } else {
+        println!(
+            "Update available: v{} -> v{}{}",
+            update_info.current_version, update_info.latest_version, pre_tag
+        );
+    }
 
     let download_url = update_info
         .download_url
@@ -259,7 +277,29 @@ fn select_release(releases: &[serde_json::Value], include_pre: bool) -> Option<&
     }
 }
 
+/// Strip git-describe suffix (`-N-gHASH`) so dev builds compare correctly.
+fn strip_git_describe(version: &str) -> &str {
+    // Match pattern: -<digits>-g<hex7+> at end of string
+    if let Some(pos) = version.rfind("-g") {
+        let after_g = &version[pos + 2..];
+        // Verify it's a hex commit hash (7+ chars)
+        if after_g.len() >= 7 && after_g.chars().all(|c| c.is_ascii_hexdigit()) {
+            // Now find the commit count before -g
+            let before_g = &version[..pos];
+            if let Some(dash_pos) = before_g.rfind('-') {
+                let count_part = &before_g[dash_pos + 1..];
+                if !count_part.is_empty() && count_part.chars().all(|c| c.is_ascii_digit()) {
+                    return &version[..dash_pos];
+                }
+            }
+        }
+    }
+    version
+}
+
 fn version_is_newer(current: &str, candidate: &str) -> bool {
+    let current = strip_git_describe(current);
+    let candidate = strip_git_describe(candidate);
     match (
         semver::Version::parse(current),
         semver::Version::parse(candidate),
@@ -704,6 +744,33 @@ mod tests {
         let releases: Vec<serde_json::Value> = vec![];
         assert!(select_release(&releases, false).is_none());
         assert!(select_release(&releases, true).is_none());
+    }
+
+    #[test]
+    fn strip_git_describe_suffix() {
+        assert_eq!(
+            strip_git_describe("0.1.0-beta.62-42-gca4172c5c"),
+            "0.1.0-beta.62"
+        );
+        assert_eq!(strip_git_describe("0.1.0-beta.73"), "0.1.0-beta.73");
+        assert_eq!(strip_git_describe("1.0.0"), "1.0.0");
+        assert_eq!(
+            strip_git_describe("0.1.0-beta.62-1-gabcdef0"),
+            "0.1.0-beta.62"
+        );
+    }
+
+    #[test]
+    fn version_comparison_with_git_describe() {
+        // The bug: git-describe version was considered newer than clean tag
+        assert!(version_is_newer(
+            "0.1.0-beta.62-42-gca4172c5c",
+            "0.1.0-beta.73"
+        ));
+        assert!(!version_is_newer(
+            "0.1.0-beta.73",
+            "0.1.0-beta.62-42-gca4172c5c"
+        ));
     }
 
     #[test]

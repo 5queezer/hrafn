@@ -532,7 +532,7 @@ By default, downloads and installs the latest release with a \
 and smoke test. Automatic rollback on failure.
 
 Use --check to only check for updates without installing.
-Use --force to skip the confirmation prompt.
+Use --force to install even if the current version appears up to date.
 Use --pre to include pre-releases when checking for updates.
 Use --version to target a specific release instead of latest.
 
@@ -546,7 +546,7 @@ Examples:
         /// Only check for updates, don't install
         #[arg(long)]
         check: bool,
-        /// Skip confirmation prompt
+        /// Force update even if already up to date
         #[arg(long)]
         force: bool,
         /// Target version (default: latest)
@@ -1596,10 +1596,13 @@ async fn main() -> Result<()> {
 
         Commands::Update {
             check,
-            force: _force,
+            force,
             version,
             pre,
         } => {
+            if check && force {
+                bail!("--check and --force cannot be used together");
+            }
             if check {
                 let info = commands::update::check(version.as_deref(), pre).await?;
                 if info.is_newer {
@@ -1617,7 +1620,7 @@ async fn main() -> Result<()> {
                 }
                 Ok(())
             } else {
-                commands::update::run(version.as_deref(), pre).await
+                commands::update::run(version.as_deref(), pre, force).await
             }
         }
 
