@@ -32,10 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v6.0.2
 
       - name: Configure Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+        uses: actions/configure-pages@v6.0.0
 
       - name: Stage docs site source
         run: |
@@ -64,7 +64,7 @@ jobs:
           destination: .site
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v4
+        uses: actions/upload-pages-artifact@v4.0.0
         with:
           path: .site
 
@@ -78,4 +78,4 @@ jobs:
     steps:
       - name: Deploy Pages site
         id: deployment
-        uses: actions/deploy-pages@665fb3d9444228d7c3533b1c03d0b76a58b84a66 # v4
+        uses: actions/deploy-pages@v5.0.0
