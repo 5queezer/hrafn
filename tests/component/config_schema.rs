@@ -360,16 +360,20 @@ fn config_only_temperature_parses() {
 }
 
 #[test]
-fn config_extra_unknown_keys_ignored() {
+fn config_extra_unknown_keys_rejected() {
     let toml_str = r#"
 default_temperature = 0.5
 future_feature = true
 [some_future_section]
 value = 123
 "#;
-    let parsed: Config =
-        toml::from_str(toml_str).expect("unknown keys and sections should be ignored");
-    assert!((parsed.default_temperature - 0.5).abs() < f64::EPSILON);
+    let err = toml::from_str::<Config>(toml_str)
+        .expect_err("unknown keys should be rejected by deny_unknown_fields");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("unknown field"),
+        "error should name the unknown field, got: {msg}"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
