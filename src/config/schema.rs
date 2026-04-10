@@ -3958,6 +3958,7 @@ fn default_a2a_eviction_interval() -> u64 {
 
 /// A single capability advertised by an ACP agent.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AcpCapability {
     pub name: String,
     pub description: String,
