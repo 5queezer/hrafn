@@ -437,6 +437,10 @@ pub struct Config {
     /// A2A (Agent-to-Agent) protocol configuration (`[a2a]`).
     #[serde(default)]
     pub a2a: A2aConfig,
+
+    /// ACP (Agent Communication Protocol) configuration (`[acp]`).
+    #[serde(default)]
+    pub acp: AcpConfig,
 }
 
 /// Multi-client workspace isolation configuration.
@@ -3948,6 +3952,105 @@ fn default_a2a_task_ttl() -> u64 {
 }
 fn default_a2a_eviction_interval() -> u64 {
     300
+}
+
+// ── ACP (Agent Communication Protocol) ─────────────────────────
+
+/// A single capability advertised by an ACP agent.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct AcpCapability {
+    pub name: String,
+    pub description: String,
+}
+
+/// Definition of an agent loaded from `[[acp.agents]]`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AcpAgentDef {
+    /// Agent name (RFC 1123 DNS label).
+    pub name: String,
+    pub description: String,
+    /// System prompt override; falls back to global if omitted.
+    #[serde(default)]
+    pub system_prompt: Option<String>,
+    /// Model override; falls back to global if omitted.
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default = "default_acp_content_types")]
+    pub input_content_types: Vec<String>,
+    #[serde(default = "default_acp_content_types")]
+    pub output_content_types: Vec<String>,
+    #[serde(default)]
+    pub capabilities: Vec<AcpCapability>,
+}
+
+fn default_acp_content_types() -> Vec<String> {
+    vec!["text/plain".to_string()]
+}
+
+/// ACP (Agent Communication Protocol) configuration (`[acp]`).
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AcpConfig {
+    /// Bearer token for authenticating inbound ACP requests.
+    #[serde(default)]
+    pub bearer_token: Option<String>,
+    /// Time-to-live in seconds for a run before automatic expiry (default: 3600).
+    #[serde(default = "default_acp_run_ttl")]
+    pub run_ttl_secs: u64,
+    /// Maximum number of concurrent runs (default: 100).
+    #[serde(default = "default_acp_max_runs")]
+    pub max_concurrent_runs: usize,
+    /// Maximum spawn depth for nested agent invocations (default: 3).
+    #[serde(default = "default_acp_max_depth")]
+    pub max_spawn_depth: usize,
+    /// Maximum concurrent spawned agents (default: 10).
+    #[serde(default = "default_acp_max_concurrent")]
+    pub max_spawn_concurrent: usize,
+    /// Agent definitions.
+    #[serde(default)]
+    pub agents: Vec<AcpAgentDef>,
+}
+
+impl std::fmt::Debug for AcpConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AcpConfig")
+            .field("bearer_token", &self.bearer_token.as_ref().map(|_| "***"))
+            .field("run_ttl_secs", &self.run_ttl_secs)
+            .field("max_concurrent_runs", &self.max_concurrent_runs)
+            .field("max_spawn_depth", &self.max_spawn_depth)
+            .field("max_spawn_concurrent", &self.max_spawn_concurrent)
+            .field("agents", &self.agents)
+            .finish()
+    }
+}
+
+impl Default for AcpConfig {
+    fn default() -> Self {
+        Self {
+            bearer_token: None,
+            run_ttl_secs: default_acp_run_ttl(),
+            max_concurrent_runs: default_acp_max_runs(),
+            max_spawn_depth: default_acp_max_depth(),
+            max_spawn_concurrent: default_acp_max_concurrent(),
+            agents: Vec::new(),
+        }
+    }
+}
+
+fn default_acp_run_ttl() -> u64 {
+    3600
+}
+fn default_acp_max_runs() -> usize {
+    100
+}
+fn default_acp_max_depth() -> usize {
+    3
+}
+fn default_acp_max_concurrent() -> usize {
+    10
 }
 
 // ── Proxy ───────────────────────────────────────────────────────
@@ -8782,6 +8885,7 @@ impl Default for Config {
             sop: SopConfig::default(),
             shell_tool: ShellToolConfig::default(),
             a2a: A2aConfig::default(),
+            acp: AcpConfig::default(),
         }
     }
 }
@@ -11930,6 +12034,7 @@ auto_save = true
             sop: SopConfig::default(),
             shell_tool: ShellToolConfig::default(),
             a2a: A2aConfig::default(),
+            acp: AcpConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -12458,6 +12563,7 @@ default_temperature = 0.7
             sop: SopConfig::default(),
             shell_tool: ShellToolConfig::default(),
             a2a: A2aConfig::default(),
+            acp: AcpConfig::default(),
         };
 
         config.save().await.unwrap();
@@ -16401,5 +16507,83 @@ auto_approve = ["file_read", "file_write", "file_edit", "memory_recall", "memory
         let config = CostConfig::default();
         assert_eq!(config.enforcement.mode, "warn");
         assert_eq!(config.enforcement.reserve_percent, 10);
+    }
+
+    #[test]
+    async fn acp_config_defaults() {
+        let config = AcpConfig::default();
+        assert!(config.bearer_token.is_none());
+        assert_eq!(config.run_ttl_secs, 3600);
+        assert_eq!(config.max_concurrent_runs, 100);
+        assert_eq!(config.max_spawn_depth, 3);
+        assert_eq!(config.max_spawn_concurrent, 10);
+        assert!(config.agents.is_empty());
+    }
+
+    #[test]
+    async fn acp_config_deserialize_with_agents() {
+        let toml_str = r#"
+            [acp]
+            bearer_token = "secret123"
+            run_ttl_secs = 7200
+
+            [[acp.agents]]
+            name = "summarizer"
+            description = "Summarizes documents"
+            tools = ["read_file"]
+
+            [[acp.agents]]
+            name = "translator"
+            description = "Translates text"
+            model = "gpt-4"
+            system_prompt = "You are a translator."
+            input_content_types = ["text/plain", "text/html"]
+            output_content_types = ["text/plain"]
+            capabilities = [{ name = "translate", description = "Translate text between languages" }]
+        "#;
+
+        let config: Config = toml::from_str(toml_str).expect("valid TOML");
+        assert_eq!(config.acp.bearer_token.as_deref(), Some("secret123"));
+        assert_eq!(config.acp.run_ttl_secs, 7200);
+        assert_eq!(config.acp.max_concurrent_runs, 100); // default
+        assert_eq!(config.acp.agents.len(), 2);
+
+        let agent0 = &config.acp.agents[0];
+        assert_eq!(agent0.name, "summarizer");
+        assert_eq!(agent0.description, "Summarizes documents");
+        assert!(agent0.system_prompt.is_none());
+        assert!(agent0.model.is_none());
+        assert_eq!(agent0.tools, vec!["read_file"]);
+        // defaults for content types
+        assert_eq!(agent0.input_content_types, vec!["text/plain"]);
+        assert_eq!(agent0.output_content_types, vec!["text/plain"]);
+        assert!(agent0.capabilities.is_empty());
+
+        let agent1 = &config.acp.agents[1];
+        assert_eq!(agent1.name, "translator");
+        assert_eq!(agent1.model.as_deref(), Some("gpt-4"));
+        assert_eq!(
+            agent1.system_prompt.as_deref(),
+            Some("You are a translator.")
+        );
+        assert_eq!(agent1.input_content_types, vec!["text/plain", "text/html"]);
+        assert_eq!(agent1.capabilities.len(), 1);
+        assert_eq!(agent1.capabilities[0].name, "translate");
+    }
+
+    #[test]
+    async fn acp_agent_def_default_content_types() {
+        let toml_str = r#"
+            name = "basic-agent"
+            description = "A basic agent"
+        "#;
+
+        let agent: AcpAgentDef = toml::from_str(toml_str).expect("valid TOML");
+        assert_eq!(agent.input_content_types, vec!["text/plain"]);
+        assert_eq!(agent.output_content_types, vec!["text/plain"]);
+        assert!(agent.tools.is_empty());
+        assert!(agent.capabilities.is_empty());
+        assert!(agent.system_prompt.is_none());
+        assert!(agent.model.is_none());
     }
 }
