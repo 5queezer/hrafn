@@ -9,6 +9,7 @@
 
 #[cfg(feature = "tool-a2a")]
 pub mod a2a;
+pub mod acp;
 pub mod api;
 pub mod api_pairing;
 #[cfg(feature = "plugins-wasm")]
