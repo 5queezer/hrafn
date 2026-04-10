@@ -41,17 +41,12 @@ impl IntoResponse for AcpError {
 // ── Content Encoding ────────────────────────────────────────────
 
 /// Encoding for message part content.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentEncoding {
+    #[default]
     Plain,
     Base64,
-}
-
-impl Default for ContentEncoding {
-    fn default() -> Self {
-        Self::Plain
-    }
 }
 
 // ── Part Metadata ───────────────────────────────────────────────
