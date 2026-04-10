@@ -256,7 +256,7 @@ Examples:
     },
 
     /// Start JSON-RPC session server over stdio
-    #[command(name = "stdio-rpc", long_about = "\
+    #[command(name = "stdio-rpc", alias = "acp", long_about = "\
 Start the JSON-RPC session server over stdio.
 
 Launches a JSON-RPC 2.0 server on stdin/stdout for IDE and tool \
@@ -267,7 +267,9 @@ Methods: initialize, session/new, session/prompt, session/stop.
 
 Examples:
   hrafn stdio-rpc                        # start JSON-RPC session server
-  hrafn stdio-rpc --max-sessions 5       # limit concurrent sessions")]
+  hrafn stdio-rpc --max-sessions 5       # limit concurrent sessions
+
+Note: 'acp' is a deprecated alias for this command.")]
     StdioRpc {
         /// Maximum concurrent sessions (default: 10)
         #[arg(long)]
