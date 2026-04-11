@@ -2243,6 +2243,40 @@ mod tests {
     }
 
     #[test]
+    fn from_config_full_autonomy_preserves_workspace_only() {
+        // Full autonomy should honor explicit workspace_only settings.
+        // Ported from zeroclaw-labs/zeroclaw#5486.
+        let autonomy_config = crate::config::AutonomyConfig {
+            level: AutonomyLevel::Full,
+            workspace_only: true,
+            ..crate::config::AutonomyConfig::default()
+        };
+        let workspace = PathBuf::from("/tmp/test-workspace");
+        let policy = SecurityPolicy::from_config(&autonomy_config, &workspace, true);
+
+        assert_eq!(policy.autonomy, AutonomyLevel::Full);
+        assert!(
+            policy.workspace_only,
+            "Full autonomy must preserve workspace_only=true"
+        );
+    }
+
+    #[test]
+    fn from_config_supervised_preserves_workspace_only() {
+        let autonomy_config = crate::config::AutonomyConfig {
+            level: AutonomyLevel::Supervised,
+            ..crate::config::AutonomyConfig::default()
+        };
+        let workspace = PathBuf::from("/tmp/test-workspace");
+        let policy = SecurityPolicy::from_config(&autonomy_config, &workspace, true);
+
+        assert!(
+            policy.workspace_only,
+            "Supervised autonomy must preserve workspace_only default (true)"
+        );
+    }
+
+    #[test]
     fn resolved_path_violation_message_includes_allowed_roots_guidance() {
         let p = default_policy();
         let msg = p.resolved_path_violation_message(Path::new("/tmp/outside.txt"));
