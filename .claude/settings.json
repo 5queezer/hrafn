@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cargo fmt --all 2>/dev/null || true"
+            "command": "cargo fmt --all"
           }
         ]
       }
