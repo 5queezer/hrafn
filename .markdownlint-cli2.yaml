@@ -11,5 +11,12 @@ config:
   MD024:
     allow_different_nesting: true
 
+overrides:
+  - files:
+      - "docs/SUMMARY.md"
+    config:
+      MD025: false
+      MD042: false
+
 ignores:
   - "target/**"
