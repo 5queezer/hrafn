@@ -214,6 +214,7 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
         sop: crate::config::SopConfig::default(),
         shell_tool: crate::config::ShellToolConfig::default(),
         a2a: crate::config::A2aConfig::default(),
+        acp: crate::config::AcpConfig::default(),
     };
 
     println!(
@@ -674,6 +675,7 @@ async fn run_quick_setup_with_home(
         sop: crate::config::SopConfig::default(),
         shell_tool: crate::config::ShellToolConfig::default(),
         a2a: crate::config::A2aConfig::default(),
+        acp: crate::config::AcpConfig::default(),
     };
 
     config.save().await?;
