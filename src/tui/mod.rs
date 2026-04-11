@@ -124,13 +124,9 @@ impl App {
     fn push_output(&mut self, line: String) {
         self.output.push(line);
         if self.auto_scroll {
-            self.scroll_to_bottom();
+            // Use saturating max so Paragraph::scroll clamps to actual content
+            self.scroll_offset = u16::MAX;
         }
-    }
-
-    fn scroll_to_bottom(&mut self) {
-        let total = u16::try_from(self.output.len()).unwrap_or(u16::MAX);
-        self.scroll_offset = total.saturating_sub(1);
     }
 }
 
@@ -218,10 +214,10 @@ fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> 
         }
         KeyCode::PageDown => {
             app.scroll_offset = app.scroll_offset.saturating_add(10);
-            // Re-enable auto-scroll if we're near the bottom
+            // Re-enable auto-scroll if scrolled past content
             let total = u16::try_from(app.output.len()).unwrap_or(u16::MAX);
-            if app.scroll_offset >= total.saturating_sub(1) {
-                app.scroll_offset = total.saturating_sub(1);
+            if app.scroll_offset >= total {
+                app.scroll_offset = u16::MAX;
                 app.auto_scroll = true;
             }
             false
