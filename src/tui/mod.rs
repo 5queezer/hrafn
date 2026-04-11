@@ -10,7 +10,7 @@ use crossterm::{
 };
 use ratatui::{
     Frame, Terminal,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     widgets::{Block, Borders},
 };
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -132,13 +132,6 @@ impl App {
         let total = u16::try_from(self.output.len()).unwrap_or(u16::MAX);
         self.scroll_offset = total.saturating_sub(1);
     }
-
-    fn visible_output_height(&self, area: Rect) -> u16 {
-        // Output pane takes Min(3) so at least 3, minus 2 for borders
-        area.height
-            .saturating_sub(if self.spinner.is_some() { 4 } else { 3 })
-            .saturating_sub(2)
-    }
 }
 
 /// Spawn the TUI event loop on a tokio blocking task.
@@ -155,10 +148,21 @@ pub fn spawn_tui(tx: mpsc::Sender<String>, mut rx: mpsc::Receiver<String>) -> Jo
     })
 }
 
+/// Guard that restores terminal state on drop (including panics).
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+        let _ = io::stdout().execute(LeaveAlternateScreen);
+    }
+}
+
 fn run_tui(tx: mpsc::Sender<String>, rx: &mut mpsc::Receiver<String>) -> io::Result<()> {
-    // Setup terminal
     terminal::enable_raw_mode()?;
     io::stdout().execute(EnterAlternateScreen)?;
+    let _guard = TerminalGuard;
+
     let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
@@ -189,9 +193,6 @@ fn run_tui(tx: mpsc::Sender<String>, rx: &mut mpsc::Receiver<String>) -> io::Res
         }
     }
 
-    // Restore terminal
-    terminal::disable_raw_mode()?;
-    io::stdout().execute(LeaveAlternateScreen)?;
     Ok(())
 }
 
