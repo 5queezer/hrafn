@@ -104,13 +104,16 @@ impl Channel for TelegramUserChannel {
 
     async fn send(&self, _message: &SendMessage) -> anyhow::Result<()> {
         // No-op: responses route through the regular Telegram bot channel.
+        tracing::trace!("[telegram_user] send() is no-op; responses route via bot channel");
         Ok(())
     }
 
     async fn listen(&self, tx: mpsc::Sender<ChannelMessage>) -> anyhow::Result<()> {
         if self.watched_channels.is_empty() {
             tracing::warn!("[telegram_user] No channels configured to watch; exiting listener");
-            return Ok(());
+            return Err(anyhow::anyhow!(
+                "No channels configured to watch in telegram_user"
+            ));
         }
 
         // Open or create session
@@ -183,7 +186,9 @@ impl Channel for TelegramUserChannel {
             tracing::warn!(
                 "[telegram_user] No watched channels could be resolved; exiting listener"
             );
-            return Ok(());
+            return Err(anyhow::anyhow!(
+                "No watched channels could be resolved in telegram_user"
+            ));
         }
 
         tracing::info!(
@@ -200,9 +205,13 @@ impl Channel for TelegramUserChannel {
             let update = match update_stream.next().await {
                 Ok(update) => update,
                 Err(e) => {
-                    tracing::warn!("[telegram_user] Update error: {e}; reconnecting in 5s");
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    continue;
+                    tracing::warn!("[telegram_user] Update stream error: {e}");
+                    // Clean up and return error for framework-managed reconnection
+                    // with exponential backoff.
+                    update_stream.sync_update_state().await;
+                    handle.quit();
+                    let _ = pool_task.await;
+                    return Err(anyhow::anyhow!("Update stream error: {e}"));
                 }
             };
 

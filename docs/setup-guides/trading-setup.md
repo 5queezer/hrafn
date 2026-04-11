@@ -52,6 +52,23 @@ bot_token = "123456:ABC-DEF..."
 allowed_users = ["your_telegram_username"]
 ```
 
+### Telegram User Channel (optional)
+
+If you want passive monitoring of third-party channels (e.g. 100eyes), add:
+
+```toml
+[channels_config.telegram_user]
+api_id = 123456
+api_hash = "your_api_hash"
+phone = "+1 555 123 4567"
+session_file = "~/.hrafn/telegram_user.session"
+reply_via_bot = "@your_hrafn_bot"
+
+[[channels_config.telegram_user.watch]]
+channel = "100eyes"
+handler = "trading_signal"
+```
+
 ### Trading Signal Analysis Prompt
 
 Hrafn loads personality/instruction files from the workspace directory. Create a
@@ -92,7 +109,7 @@ allowed_tools = [
 ]
 system_prompt = """
 Du bist ein Trading-Analyst. Du erhältst Signale von 100eyes.
-Nutze get_indicators um eigene Analyse zu machen.
+Nutze chartgen__get_indicators um eigene Analyse zu machen.
 Regeln:
 - Kein Entry ohne Cipher B grüner Dot
 - ADX < 20 = kein Trend, nicht handeln
@@ -106,8 +123,9 @@ Regeln:
 1. Start Chartgen: `chartgen --trade --testnet`
 2. Start Hrafn: `hrafn`
 3. Send a test trading signal image to your Hrafn Telegram bot
-4. Verify the agent calls Chartgen MCP tools (`generate_chart`,
-   `list_indicators`) and responds with analysis
+4. Verify the agent calls Chartgen MCP tools (`chartgen__generate_chart`,
+   `chartgen__list_indicators`, `chartgen__get_indicators`) and responds with
+   analysis
 
 ## Troubleshooting
 

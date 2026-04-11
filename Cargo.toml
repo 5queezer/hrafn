@@ -347,6 +347,7 @@ webauthn = []
 # not available on standard CI runners (e.g., voice-wake needs libasound2-dev).
 ci-all = [
     "desktop",
+    "channel-telegram-user",
     "channel-nostr",
     "channel-telegram",
     "channel-discord",

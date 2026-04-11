@@ -4489,6 +4489,9 @@ fn collect_configured_channels(
             channel: Arc::new(TelegramUserChannel::new(tgu)),
         });
     }
+    // Note: telegram_user config field is behind cfg(feature = "channel-telegram-user"),
+    // so TOML with [channels_config.telegram_user] will fail to deserialize when the
+    // feature is disabled — no runtime warning needed.
 
     #[cfg(feature = "channel-discord")]
     if let Some(ref dc) = config.channels_config.discord {

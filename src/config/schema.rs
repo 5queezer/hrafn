@@ -9539,6 +9539,19 @@ impl Config {
                     "config.channels_config.telegram.bot_token",
                 )?;
             }
+            #[cfg(feature = "channel-telegram-user")]
+            if let Some(ref mut tgu) = config.channels_config.telegram_user {
+                decrypt_secret(
+                    &store,
+                    &mut tgu.api_hash,
+                    "config.channels_config.telegram_user.api_hash",
+                )?;
+                decrypt_secret(
+                    &store,
+                    &mut tgu.phone,
+                    "config.channels_config.telegram_user.phone",
+                )?;
+            }
             if let Some(ref mut dc) = config.channels_config.discord {
                 decrypt_secret(
                     &store,
@@ -9939,6 +9952,28 @@ impl Config {
                     anyhow::bail!(
                         "gateway.path_prefix contains invalid character '{bad}'; \
                          only unreserved and sub-delim URI characters are allowed"
+                    );
+                }
+            }
+        }
+
+        // Telegram User channel
+        #[cfg(feature = "channel-telegram-user")]
+        if let Some(ref tgu) = self.channels_config.telegram_user {
+            if tgu.watch.is_empty() {
+                anyhow::bail!(
+                    "channels_config.telegram_user.watch must contain at least one channel"
+                );
+            }
+            for (i, w) in tgu.watch.iter().enumerate() {
+                if w.channel.trim().is_empty() {
+                    anyhow::bail!(
+                        "channels_config.telegram_user.watch[{i}].channel must not be empty"
+                    );
+                }
+                if w.handler.trim().is_empty() {
+                    anyhow::bail!(
+                        "channels_config.telegram_user.watch[{i}].handler must not be empty"
                     );
                 }
             }
@@ -11029,6 +11064,19 @@ impl Config {
                 &store,
                 &mut tg.bot_token,
                 "config.channels_config.telegram.bot_token",
+            )?;
+        }
+        #[cfg(feature = "channel-telegram-user")]
+        if let Some(ref mut tgu) = config_to_save.channels_config.telegram_user {
+            encrypt_secret(
+                &store,
+                &mut tgu.api_hash,
+                "config.channels_config.telegram_user.api_hash",
+            )?;
+            encrypt_secret(
+                &store,
+                &mut tgu.phone,
+                "config.channels_config.telegram_user.phone",
             )?;
         }
         if let Some(ref mut dc) = config_to_save.channels_config.discord {
