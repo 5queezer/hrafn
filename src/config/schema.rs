@@ -11039,6 +11039,12 @@ impl Config {
             )?;
         }
 
+        encrypt_optional_secret(
+            &store,
+            &mut config_to_save.acp.bearer_token,
+            "config.acp.bearer_token",
+        )?;
+
         #[cfg(feature = "channel-nostr")]
         if let Some(ref mut ns) = config_to_save.channels_config.nostr {
             encrypt_secret(

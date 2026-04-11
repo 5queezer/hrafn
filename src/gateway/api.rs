@@ -1100,6 +1100,7 @@ fn mask_sensitive_fields(config: &crate::config::Config) -> crate::config::Confi
     }
     mask_optional_secret(&mut masked.transcription.api_key);
     mask_optional_secret(&mut masked.a2a.bearer_token);
+    mask_optional_secret(&mut masked.acp.bearer_token);
     masked
 }
 
@@ -1292,6 +1293,7 @@ fn restore_masked_sensitive_fields(
         &current.transcription.api_key,
     );
     restore_optional_secret(&mut incoming.a2a.bearer_token, &current.a2a.bearer_token);
+    restore_optional_secret(&mut incoming.acp.bearer_token, &current.acp.bearer_token);
 }
 
 fn hydrate_config_for_save(
