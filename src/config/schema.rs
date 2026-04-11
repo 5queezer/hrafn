@@ -948,6 +948,11 @@ pub struct McpServerConfig {
     /// Optional per-call timeout in seconds (hard capped in validation).
     #[serde(default)]
     pub tool_timeout_secs: Option<u64>,
+    /// Tool names (or glob patterns) that should be loaded eagerly even when
+    /// `deferred_loading` is true. Useful for high-frequency tools like memory
+    /// or shell that the LLM needs on every turn without a tool_search roundtrip.
+    #[serde(default)]
+    pub eager_tools: Vec<String>,
 }
 
 /// External MCP client configuration (`[mcp]` section).

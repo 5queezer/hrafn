@@ -5234,8 +5234,17 @@ pub async fn start_channels(config: Config) -> Result<()> {
             Ok(registry) => {
                 let registry = std::sync::Arc::new(registry);
                 if config.mcp.deferred_loading {
+                    // Collect eager_tools patterns from all server configs
+                    let eager_patterns: Vec<String> = config
+                        .mcp
+                        .servers
+                        .iter()
+                        .flat_map(|s| s.eager_tools.iter().map(|p| format!("{}__{}", s.name, p)))
+                        .collect();
+
                     let deferred_set = crate::tools::DeferredMcpToolSet::from_registry(
                         std::sync::Arc::clone(&registry),
+                        &eager_patterns,
                     )
                     .await;
                     tracing::info!(
@@ -5243,6 +5252,24 @@ pub async fn start_channels(config: Config) -> Result<()> {
                         deferred_set.len(),
                         registry.server_count()
                     );
+
+                    // Register eager tools as normal MCP tools
+                    let all_names = registry.tool_names();
+                    for name in &all_names {
+                        if !crate::tools::mcp_deferred::is_eager_match(name, &eager_patterns) {
+                            continue;
+                        }
+                        if let Some(def) = registry.get_tool_def(name).await {
+                            let wrapper: std::sync::Arc<dyn crate::tools::Tool> =
+                                std::sync::Arc::new(crate::tools::McpToolWrapper::new(
+                                    name.clone(),
+                                    def,
+                                    std::sync::Arc::clone(&registry),
+                                ));
+                            built_tools.push(Box::new(crate::tools::ArcToolRef(wrapper)));
+                        }
+                    }
+
                     deferred_section =
                         crate::tools::mcp_deferred::build_deferred_tools_section(&deferred_set);
                     let activated = std::sync::Arc::new(std::sync::Mutex::new(

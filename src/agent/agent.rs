@@ -444,8 +444,19 @@ impl Agent {
                 Ok(registry) => {
                     let registry = std::sync::Arc::new(registry);
                     if config.mcp.deferred_loading {
+                        // Collect eager_tools patterns from all server configs
+                        let eager_patterns: Vec<String> = config
+                            .mcp
+                            .servers
+                            .iter()
+                            .flat_map(|s| {
+                                s.eager_tools.iter().map(|p| format!("{}__{}", s.name, p))
+                            })
+                            .collect();
+
                         let deferred_set = tools::DeferredMcpToolSet::from_registry(
                             std::sync::Arc::clone(&registry),
+                            &eager_patterns,
                         )
                         .await;
                         tracing::info!(
@@ -453,6 +464,35 @@ impl Agent {
                             deferred_set.len(),
                             registry.server_count()
                         );
+
+                        // Register eager tools as normal MCP tools
+                        let all_names = registry.tool_names();
+                        let mut eager_count = 0usize;
+                        for name in &all_names {
+                            if !tools::mcp_deferred::is_eager_match(name, &eager_patterns) {
+                                continue;
+                            }
+                            if let Some(def) = registry.get_tool_def(name).await {
+                                let wrapper: std::sync::Arc<dyn tools::Tool> =
+                                    std::sync::Arc::new(tools::McpToolWrapper::new(
+                                        name.clone(),
+                                        def,
+                                        std::sync::Arc::clone(&registry),
+                                    ));
+                                if let Some(ref handle) = delegate_handle {
+                                    handle.write().push(std::sync::Arc::clone(&wrapper));
+                                }
+                                tools.push(Box::new(tools::ArcToolRef(wrapper)));
+                                eager_count += 1;
+                            }
+                        }
+                        if eager_count > 0 {
+                            tracing::info!(
+                                "MCP eager: {} tool(s) registered directly",
+                                eager_count
+                            );
+                        }
+
                         let activated =
                             Arc::new(std::sync::Mutex::new(tools::ActivatedToolSet::new()));
                         activated_tools = Some(Arc::clone(&activated));
