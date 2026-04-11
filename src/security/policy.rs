@@ -1603,20 +1603,10 @@ impl SecurityPolicy {
             };
         }
 
-        // When autonomy is Full, disable workspace_only so the agent can
-        // access paths outside the workspace.  Forbidden-path checks still
-        // apply, preventing access to sensitive system directories.
-        // Ported from zeroclaw-labs/zeroclaw#5486.
-        let effective_workspace_only = if autonomy_config.level == AutonomyLevel::Full {
-            false
-        } else {
-            autonomy_config.workspace_only
-        };
-
         Self {
             autonomy: autonomy_config.level,
             workspace_dir: workspace_dir.to_path_buf(),
-            workspace_only: effective_workspace_only,
+            workspace_only: autonomy_config.workspace_only,
             allowed_commands: autonomy_config.allowed_commands.clone(),
             forbidden_paths: autonomy_config.forbidden_paths.clone(),
             allowed_roots: autonomy_config
