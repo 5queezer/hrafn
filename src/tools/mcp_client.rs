@@ -316,6 +316,7 @@ mod tests {
             transport: McpTransport::Stdio,
             url: None,
             headers: std::collections::HashMap::default(),
+            eager_tools: vec![],
         };
         let result = McpServer::connect(config).await;
         assert!(result.is_err());
@@ -335,6 +336,7 @@ mod tests {
             transport: McpTransport::Stdio,
             url: None,
             headers: std::collections::HashMap::default(),
+            eager_tools: vec![],
         }];
         let registry = McpRegistry::connect_all(&configs)
             .await
