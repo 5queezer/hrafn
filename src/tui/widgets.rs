@@ -45,7 +45,12 @@ impl SpinnerState {
     }
 }
 
-pub(crate) fn render_output_pane(frame: &mut Frame, area: Rect, output: &[String], scroll_offset: u16) {
+pub(crate) fn render_output_pane(
+    frame: &mut Frame,
+    area: Rect,
+    output: &[String],
+    scroll_offset: u16,
+) {
     let block = Block::default()
         .title(" Hrafn ")
         .title_style(theme::bold())
@@ -66,7 +71,12 @@ pub(crate) fn render_output_pane(frame: &mut Frame, area: Rect, output: &[String
     frame.render_widget(paragraph, area);
 }
 
-pub(crate) fn render_spinner_line(frame: &mut Frame, area: Rect, state: &SpinnerState, tick: usize) {
+pub(crate) fn render_spinner_line(
+    frame: &mut Frame,
+    area: Rect,
+    state: &SpinnerState,
+    tick: usize,
+) {
     let spinner = Spinner::new();
     let elapsed = state.elapsed_secs();
     let text = format!(
