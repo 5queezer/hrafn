@@ -6,6 +6,8 @@ use axum::{Json, http::StatusCode, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 // ── Error Model ─────────────────────────────────────────────────
 
@@ -288,6 +290,155 @@ pub struct AcpSession {
     pub history: Vec<String>,
 }
 
+// ── RunStore ────────────────────────────────────────────────────
+
+/// In-memory store for ACP run lifecycle management.
+pub struct RunStore {
+    runs: RwLock<HashMap<String, Run>>,
+    events: RwLock<HashMap<String, Vec<Event>>>,
+    session_runs: RwLock<HashMap<String, Vec<String>>>,
+    timestamps: RwLock<HashMap<String, std::time::Instant>>,
+}
+
+impl RunStore {
+    /// Create an empty store.
+    pub fn new() -> Self {
+        Self {
+            runs: RwLock::new(HashMap::new()),
+            events: RwLock::new(HashMap::new()),
+            session_runs: RwLock::new(HashMap::new()),
+            timestamps: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Insert a run, index by session if present, create empty event vec.
+    pub async fn insert(&self, run: Run) {
+        let run_id = run.run_id.clone();
+        let session_id = run.session_id.clone();
+
+        self.session_runs
+            .write()
+            .await
+            .entry(session_id)
+            .or_default()
+            .push(run_id.clone());
+
+        self.events.write().await.insert(run_id.clone(), Vec::new());
+        self.runs.write().await.insert(run_id, run);
+    }
+
+    /// Get a run by ID (cloned).
+    pub async fn get(&self, run_id: &str) -> Option<Run> {
+        self.runs.read().await.get(run_id).cloned()
+    }
+
+    /// Update a run's status. If terminal, set `finished_at` and record eviction timestamp.
+    pub async fn update_status(&self, run_id: &str, status: RunStatus) {
+        let mut runs = self.runs.write().await;
+        if let Some(run) = runs.get_mut(run_id) {
+            let is_terminal = status.is_terminal();
+            run.status = status;
+            if is_terminal {
+                run.finished_at = Some(Utc::now());
+                drop(runs);
+                self.timestamps
+                    .write()
+                    .await
+                    .insert(run_id.to_string(), std::time::Instant::now());
+            }
+        }
+    }
+
+    /// Set the output messages for a run.
+    pub async fn set_output(&self, run_id: &str, output: Vec<Message>) {
+        if let Some(run) = self.runs.write().await.get_mut(run_id) {
+            run.output = output;
+        }
+    }
+
+    /// Set an error on a run.
+    pub async fn set_error(&self, run_id: &str, error: AcpError) {
+        if let Some(run) = self.runs.write().await.get_mut(run_id) {
+            run.error = Some(error);
+        }
+    }
+
+    /// Push an event for a run.
+    pub async fn push_event(&self, run_id: &str, event: Event) {
+        self.events
+            .write()
+            .await
+            .entry(run_id.to_string())
+            .or_default()
+            .push(event);
+    }
+
+    /// Get all events for a run (cloned).
+    pub async fn get_events(&self, run_id: &str) -> Vec<Event> {
+        self.events
+            .read()
+            .await
+            .get(run_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Get all run IDs associated with a session.
+    pub async fn runs_for_session(&self, session_id: &str) -> Vec<String> {
+        self.session_runs
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Count non-terminal (active) runs.
+    pub async fn active_run_count(&self) -> usize {
+        self.runs
+            .read()
+            .await
+            .values()
+            .filter(|r| !r.status.is_terminal())
+            .count()
+    }
+
+    /// Remove terminal runs whose eviction timestamp is older than `ttl`. Returns count removed.
+    pub async fn evict_expired(&self, ttl: std::time::Duration) -> usize {
+        let now = std::time::Instant::now();
+        let expired: Vec<String> = self
+            .timestamps
+            .read()
+            .await
+            .iter()
+            .filter(|(_, ts)| now.duration_since(**ts) >= ttl)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        let count = expired.len();
+        if count == 0 {
+            return 0;
+        }
+
+        let mut runs = self.runs.write().await;
+        let mut events = self.events.write().await;
+        let mut session_runs = self.session_runs.write().await;
+        let mut timestamps = self.timestamps.write().await;
+
+        for id in &expired {
+            if let Some(run) = runs.remove(id) {
+                if let Some(ids) = session_runs.get_mut(&run.session_id) {
+                    ids.retain(|rid| rid != id);
+                }
+            }
+            events.remove(id);
+            timestamps.remove(id);
+        }
+
+        count
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -352,5 +503,84 @@ mod tests {
         });
         let val: Value = serde_json::to_value(&meta).unwrap();
         assert_eq!(val["kind"], "trajectory");
+    }
+
+    fn make_run(agent: &str, session: &str) -> Run {
+        Run {
+            agent_name: agent.into(),
+            session_id: session.into(),
+            run_id: Uuid::new_v4().to_string(),
+            status: RunStatus::Created,
+            await_request: None,
+            output: vec![],
+            error: None,
+            created_at: Some(Utc::now()),
+            finished_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn run_store_insert_and_get() {
+        let store = RunStore::new();
+        let run = make_run("agent-a", "sess-1");
+        let run_id = run.run_id.clone();
+        store.insert(run.clone()).await;
+
+        let fetched = store.get(&run_id).await.expect("run should exist");
+        assert_eq!(fetched.run_id, run_id);
+        assert_eq!(fetched.agent_name, "agent-a");
+    }
+
+    #[tokio::test]
+    async fn run_store_update_status_terminal() {
+        let store = RunStore::new();
+        let run = make_run("agent-b", "sess-2");
+        let run_id = run.run_id.clone();
+        store.insert(run).await;
+
+        store.update_status(&run_id, RunStatus::Completed).await;
+        let fetched = store.get(&run_id).await.unwrap();
+        assert_eq!(fetched.status, RunStatus::Completed);
+        assert!(fetched.finished_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn run_store_session_tracking() {
+        let store = RunStore::new();
+        let session = "sess-track";
+        let run = make_run("agent-c", session);
+        let run_id = run.run_id.clone();
+        store.insert(run).await;
+
+        let ids = store.runs_for_session(session).await;
+        assert_eq!(ids, vec![run_id]);
+    }
+
+    #[tokio::test]
+    async fn run_store_active_count() {
+        let store = RunStore::new();
+        let r1 = make_run("a", "s1");
+        let r2 = make_run("a", "s2");
+        let r2_id = r2.run_id.clone();
+        store.insert(r1).await;
+        store.insert(r2).await;
+        assert_eq!(store.active_run_count().await, 2);
+
+        store.update_status(&r2_id, RunStatus::Failed).await;
+        assert_eq!(store.active_run_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn run_store_events() {
+        let store = RunStore::new();
+        let run = make_run("a", "s");
+        let run_id = run.run_id.clone();
+        store.insert(run.clone()).await;
+
+        let event = Event::RunCreated { run };
+        store.push_event(&run_id, event).await;
+
+        let events = store.get_events(&run_id).await;
+        assert_eq!(events.len(), 1);
     }
 }

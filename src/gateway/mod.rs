@@ -389,6 +389,8 @@ pub struct AppState {
     /// In-memory A2A task store (populated when `a2a.enabled`)
     #[cfg(feature = "tool-a2a")]
     pub a2a_task_store: Option<Arc<a2a::TaskStore>>,
+    /// ACP run store
+    pub acp_run_store: Arc<crate::gateway::acp::RunStore>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -890,6 +892,9 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         (None, None)
     };
 
+    // ── ACP (Agent Communication Protocol) ──────────────────────
+    let acp_run_store = Arc::new(acp::RunStore::new());
+
     let state = AppState {
         config: config_state,
         provider,
@@ -954,6 +959,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         a2a_agent_card,
         #[cfg(feature = "tool-a2a")]
         a2a_task_store,
+        acp_run_store,
     };
 
     // Config PUT needs larger body limit (1MB)
@@ -2484,6 +2490,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2559,6 +2566,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2961,6 +2969,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let mut headers = HeaderMap::new();
@@ -3051,6 +3060,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let headers = HeaderMap::new();
@@ -3147,6 +3157,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let response = handle_webhook(
@@ -3216,6 +3227,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let mut headers = HeaderMap::new();
@@ -3290,6 +3302,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let mut headers = HeaderMap::new();
@@ -3372,6 +3385,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let response = Box::pin(handle_nextcloud_talk_webhook(
@@ -3448,6 +3462,7 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
 
         let mut headers = HeaderMap::new();
