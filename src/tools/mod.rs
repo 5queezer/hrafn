@@ -104,6 +104,7 @@ pub mod sop_approve;
 pub mod sop_execute;
 pub mod sop_list;
 pub mod sop_status;
+pub mod spawn_agent;
 pub mod swarm;
 pub mod text_browser;
 pub mod tool_search;
