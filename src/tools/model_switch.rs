@@ -143,7 +143,7 @@ impl ModelSwitchTool {
                         "available_providers": known_providers.iter().map(|p| p.name).collect::<Vec<_>>()
                     }))?,
                     error: Some(format!(
-                        "Unknown provider: {}. Use 'list_providers' to see available options, or use 'custom:<url>' for custom endpoints.",
+                        "Unknown provider: {}. Use 'list_providers' to see available options, or use 'custom:<url>' (OpenAI-compatible) or 'anthropic-custom:<url>' (Anthropic-compatible) for custom endpoints.",
                         provider
                     )),
                 });
