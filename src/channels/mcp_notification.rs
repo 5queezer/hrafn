@@ -215,9 +215,7 @@ async fn run_sse_listener(
             );
         }
         Err(e) => {
-            tracing::warn!(
-                "MCP notification subscribe to `{server_name}` failed (non-fatal): {e}"
-            );
+            tracing::warn!("MCP notification subscribe to `{server_name}` failed (non-fatal): {e}");
         }
     }
 
@@ -250,8 +248,7 @@ async fn run_sse_listener(
 
                 match serde_json::from_str::<Value>(&data) {
                     Ok(msg) => {
-                        let method =
-                            msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                        let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
 
                         if method == "notifications/alert_triggered" {
                             if let Some(channel_msg) =
