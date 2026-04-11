@@ -114,9 +114,11 @@ impl App {
             }
             _ => {
                 self.push_output(format!("> {text}"));
-                self.spinner = Some(SpinnerState::new("pondering"));
-                // Non-blocking send; if the channel is full we drop the message
-                let _ = tx.try_send(text);
+                if tx.try_send(text).is_ok() {
+                    self.spinner = Some(SpinnerState::new("pondering"));
+                } else {
+                    self.push_output("[send failed — channel full]".into());
+                }
             }
         }
     }
@@ -124,13 +126,9 @@ impl App {
     fn push_output(&mut self, line: String) {
         self.output.push(line);
         if self.auto_scroll {
-            self.scroll_to_bottom();
+            // Use saturating max so Paragraph::scroll clamps to actual content
+            self.scroll_offset = u16::MAX;
         }
-    }
-
-    fn scroll_to_bottom(&mut self) {
-        let total = u16::try_from(self.output.len()).unwrap_or(u16::MAX);
-        self.scroll_offset = total.saturating_sub(1);
     }
 }
 
@@ -160,8 +158,8 @@ impl Drop for TerminalGuard {
 
 fn run_tui(tx: mpsc::Sender<String>, rx: &mut mpsc::Receiver<String>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
+    let _guard = TerminalGuard; // ensures raw mode + alt screen are restored even on panic
     io::stdout().execute(EnterAlternateScreen)?;
-    let _guard = TerminalGuard;
 
     let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
@@ -206,8 +204,11 @@ fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> 
         KeyCode::Esc => {
             if app.spinner.is_some() {
                 app.spinner = None;
-                let _ = tx.try_send(CANCEL_SENTINEL.to_string());
-                app.push_output("[cancelled]".into());
+                if tx.try_send(CANCEL_SENTINEL.to_string()).is_ok() {
+                    app.push_output("[cancelled]".into());
+                } else {
+                    app.push_output("[cancel failed — channel full]".into());
+                }
             }
             false
         }
@@ -218,10 +219,10 @@ fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> 
         }
         KeyCode::PageDown => {
             app.scroll_offset = app.scroll_offset.saturating_add(10);
-            // Re-enable auto-scroll if we're near the bottom
+            // Re-enable auto-scroll if scrolled past content
             let total = u16::try_from(app.output.len()).unwrap_or(u16::MAX);
-            if app.scroll_offset >= total.saturating_sub(1) {
-                app.scroll_offset = total.saturating_sub(1);
+            if app.scroll_offset >= total {
+                app.scroll_offset = u16::MAX;
                 app.auto_scroll = true;
             }
             false
