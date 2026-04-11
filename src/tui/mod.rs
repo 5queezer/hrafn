@@ -114,9 +114,11 @@ impl App {
             }
             _ => {
                 self.push_output(format!("> {text}"));
-                self.spinner = Some(SpinnerState::new("pondering"));
-                // Non-blocking send; if the channel is full we drop the message
-                let _ = tx.try_send(text);
+                if tx.try_send(text).is_ok() {
+                    self.spinner = Some(SpinnerState::new("pondering"));
+                } else {
+                    self.push_output("[send failed — channel full]".into());
+                }
             }
         }
     }
@@ -156,8 +158,8 @@ impl Drop for TerminalGuard {
 
 fn run_tui(tx: mpsc::Sender<String>, rx: &mut mpsc::Receiver<String>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
+    let _guard = TerminalGuard; // ensures raw mode + alt screen are restored even on panic
     io::stdout().execute(EnterAlternateScreen)?;
-    let _guard = TerminalGuard;
 
     let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
@@ -202,8 +204,11 @@ fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> 
         KeyCode::Esc => {
             if app.spinner.is_some() {
                 app.spinner = None;
-                let _ = tx.try_send(CANCEL_SENTINEL.to_string());
-                app.push_output("[cancelled]".into());
+                if tx.try_send(CANCEL_SENTINEL.to_string()).is_ok() {
+                    app.push_output("[cancelled]".into());
+                } else {
+                    app.push_output("[cancel failed — channel full]".into());
+                }
             }
             false
         }

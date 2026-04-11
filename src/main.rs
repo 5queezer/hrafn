@@ -77,6 +77,10 @@ async fn run_interactive_tui() -> Result<()> {
     use hrafn::tui::{CANCEL_SENTINEL, spawn_tui};
     use tokio::sync::mpsc;
 
+    if !std::io::stdout().is_terminal() {
+        return print_no_command_help();
+    }
+
     let (user_tx, mut user_rx) = mpsc::channel::<String>(32);
     let (agent_tx, agent_rx) = mpsc::channel::<String>(32);
 
@@ -96,7 +100,9 @@ async fn run_interactive_tui() -> Result<()> {
         }
     }
 
-    let _ = tui_handle.await;
+    tui_handle
+        .await
+        .map_err(|e| anyhow::anyhow!("TUI task panicked: {e}"))?;
     Ok(())
 }
 
