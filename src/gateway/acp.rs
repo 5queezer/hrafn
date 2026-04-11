@@ -777,24 +777,148 @@ async fn handle_run_async(
 }
 
 /// Execute a run in stream mode — return SSE event stream.
-///
-/// Placeholder: stream mode will be implemented in a follow-up commit.
 async fn handle_run_stream(
     state: AppState,
     run: Run,
-    _agent_def: AcpAgentDef,
-    _user_message: String,
+    agent_def: AcpAgentDef,
+    user_message: String,
 ) -> Result<axum::response::Response, AcpError> {
-    // Mark the run as failed since stream mode is not yet implemented
-    state
-        .acp_run_store
-        .update_status(&run.run_id, RunStatus::Failed)
+    use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+    use std::convert::Infallible;
+
+    let run_id = run.run_id.clone();
+
+    // Channel for SSE events — capacity enough for bursts
+    let (sse_tx, sse_rx) = tokio::sync::mpsc::channel::<Result<SseEvent, Infallible>>(256);
+
+    // Emit RunCreated
+    let _ = sse_tx
+        .send(Ok(SseEvent::default().event("run.created").data(
+            serde_json::to_string(&Event::RunCreated { run: run.clone() }).unwrap_or_default(),
+        )))
         .await;
-    Err(AcpError {
-        code: AcpErrorCode::InvalidInput,
-        message: "stream mode not yet implemented".into(),
-        data: None,
-    })
+
+    // Spawn the streaming agent execution
+    let bg_state = state.clone();
+    let bg_run_id = run_id.clone();
+    tokio::spawn(async move {
+        bg_state
+            .acp_run_store
+            .update_status(&bg_run_id, RunStatus::InProgress)
+            .await;
+
+        // Emit RunInProgress
+        if let Some(r) = bg_state.acp_run_store.get(&bg_run_id).await {
+            let _ = sse_tx
+                .send(Ok(SseEvent::default().event("run.in-progress").data(
+                    serde_json::to_string(&Event::RunInProgress { run: r }).unwrap_or_default(),
+                )))
+                .await;
+        }
+
+        // Emit MessageCreated
+        let msg_created = Message {
+            role: "agent".into(),
+            parts: vec![],
+            created_at: Some(Utc::now()),
+            completed_at: None,
+        };
+        let _ = sse_tx
+            .send(Ok(SseEvent::default().event("message.created").data(
+                serde_json::to_string(&Event::MessageCreated {
+                    message: msg_created,
+                })
+                .unwrap_or_default(),
+            )))
+            .await;
+
+        // Execute with streaming
+        let result = execute_agent_streamed(&bg_state, &agent_def, &user_message, &sse_tx).await;
+
+        match result {
+            Ok(response_text) => {
+                // Emit MessageCompleted
+                let msg_completed = Message {
+                    role: "agent".into(),
+                    parts: vec![MessagePart {
+                        name: None,
+                        content_type: "text/plain".into(),
+                        content: Some(response_text.clone()),
+                        content_encoding: None,
+                        content_url: None,
+                        metadata: None,
+                    }],
+                    created_at: Some(Utc::now()),
+                    completed_at: Some(Utc::now()),
+                };
+                let _ = sse_tx
+                    .send(Ok(SseEvent::default().event("message.completed").data(
+                        serde_json::to_string(&Event::MessageCompleted {
+                            message: msg_completed,
+                        })
+                        .unwrap_or_default(),
+                    )))
+                    .await;
+
+                let output = vec![Message {
+                    role: "agent".into(),
+                    parts: vec![MessagePart {
+                        name: None,
+                        content_type: "text/plain".into(),
+                        content: Some(response_text),
+                        content_encoding: None,
+                        content_url: None,
+                        metadata: None,
+                    }],
+                    created_at: Some(Utc::now()),
+                    completed_at: Some(Utc::now()),
+                }];
+                bg_state.acp_run_store.set_output(&bg_run_id, output).await;
+                bg_state
+                    .acp_run_store
+                    .update_status(&bg_run_id, RunStatus::Completed)
+                    .await;
+
+                // Emit RunCompleted
+                if let Some(r) = bg_state.acp_run_store.get(&bg_run_id).await {
+                    let _ = sse_tx
+                        .send(Ok(SseEvent::default().event("run.completed").data(
+                            serde_json::to_string(&Event::RunCompleted { run: r })
+                                .unwrap_or_default(),
+                        )))
+                        .await;
+                }
+            }
+            Err(e) => {
+                let error = AcpError {
+                    code: AcpErrorCode::ServerError,
+                    message: format!("{e}"),
+                    data: None,
+                };
+                bg_state.acp_run_store.set_error(&bg_run_id, error).await;
+                bg_state
+                    .acp_run_store
+                    .update_status(&bg_run_id, RunStatus::Failed)
+                    .await;
+
+                // Emit RunFailed
+                if let Some(r) = bg_state.acp_run_store.get(&bg_run_id).await {
+                    let _ = sse_tx
+                        .send(Ok(SseEvent::default().event("run.failed").data(
+                            serde_json::to_string(&Event::RunFailed { run: r }).unwrap_or_default(),
+                        )))
+                        .await;
+                }
+            }
+        }
+        // sse_tx drops here, closing the stream
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(sse_rx);
+
+    Ok(Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response())
 }
 
 /// Build an `Agent` from a config, applying agent-def overrides, and execute a turn.
@@ -808,6 +932,96 @@ async fn execute_agent(
 
     let mut agent = crate::agent::Agent::from_config(&config).await?;
     agent.turn(user_message).await
+}
+
+/// Build an `Agent` from a config and execute a streamed turn, mapping `TurnEvent`s
+/// to ACP SSE events.
+async fn execute_agent_streamed(
+    state: &AppState,
+    agent_def: &AcpAgentDef,
+    user_message: &str,
+    sse_tx: &tokio::sync::mpsc::Sender<
+        Result<axum::response::sse::Event, std::convert::Infallible>,
+    >,
+) -> anyhow::Result<String> {
+    use crate::agent::TurnEvent;
+
+    let mut config = state.config.lock().clone();
+    apply_agent_def_overrides(&mut config, agent_def);
+
+    let mut agent = crate::agent::Agent::from_config(&config).await?;
+
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<TurnEvent>(256);
+
+    // Spawn a forwarder that maps TurnEvents to SSE events
+    let fwd_tx = sse_tx.clone();
+    let forwarder = tokio::spawn(async move {
+        while let Some(turn_event) = event_rx.recv().await {
+            let part = match turn_event {
+                TurnEvent::Chunk { delta } => MessagePart {
+                    name: None,
+                    content_type: "text/plain".into(),
+                    content: Some(delta),
+                    content_encoding: None,
+                    content_url: None,
+                    metadata: None,
+                },
+                TurnEvent::Thinking { delta } => MessagePart {
+                    name: None,
+                    content_type: "text/plain".into(),
+                    content: None,
+                    content_encoding: None,
+                    content_url: None,
+                    metadata: Some(PartMetadata::Trajectory(TrajectoryMetadata {
+                        message: Some(delta),
+                        tool_name: None,
+                        tool_input: None,
+                        tool_output: None,
+                    })),
+                },
+                TurnEvent::ToolCall { name, args } => MessagePart {
+                    name: None,
+                    content_type: "text/plain".into(),
+                    content: None,
+                    content_encoding: None,
+                    content_url: None,
+                    metadata: Some(PartMetadata::Trajectory(TrajectoryMetadata {
+                        message: None,
+                        tool_name: Some(name),
+                        tool_input: Some(args),
+                        tool_output: None,
+                    })),
+                },
+                TurnEvent::ToolResult { name, output } => MessagePart {
+                    name: None,
+                    content_type: "text/plain".into(),
+                    content: None,
+                    content_encoding: None,
+                    content_url: None,
+                    metadata: Some(PartMetadata::Trajectory(TrajectoryMetadata {
+                        message: None,
+                        tool_name: Some(name),
+                        tool_input: None,
+                        tool_output: Some(serde_json::Value::String(output)),
+                    })),
+                },
+            };
+
+            let event = Event::MessagePart { part };
+            let _ = fwd_tx
+                .send(Ok(axum::response::sse::Event::default()
+                    .event("message.part")
+                    .data(serde_json::to_string(&event).unwrap_or_default())))
+                .await;
+        }
+    });
+
+    let result = agent.turn_streamed(user_message, event_tx).await;
+
+    // Wait for the forwarder to drain remaining events
+    let _ = forwarder.await;
+
+    result
 }
 
 /// Apply agent-def overrides (system_prompt, model) to a cloned config.
