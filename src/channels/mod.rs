@@ -34,6 +34,7 @@ pub mod linq;
 #[cfg(feature = "channel-matrix")]
 pub mod matrix;
 pub mod mattermost;
+pub mod mcp_notification;
 pub mod media_pipeline;
 pub mod mochat;
 pub mod mqtt;
@@ -5482,6 +5483,35 @@ pub async fn start_channels(config: Config) -> Result<()> {
             max_backoff_secs,
         ));
     }
+    // Spawn MCP notification listeners for servers with subscribe_notifications enabled.
+    if config.mcp.enabled {
+        for server_cfg in &config.mcp.servers {
+            if !server_cfg.subscribe_notifications {
+                continue;
+            }
+            let Some(ref url) = server_cfg.url else {
+                tracing::warn!(
+                    "MCP server `{}` has subscribe_notifications but no URL — skipping",
+                    server_cfg.name
+                );
+                continue;
+            };
+            tracing::info!(
+                "Spawning MCP notification listener for `{}`",
+                server_cfg.name
+            );
+            handles.push(mcp_notification::spawn_notification_listener(
+                server_cfg.name.clone(),
+                url.clone(),
+                server_cfg.headers.clone(),
+                server_cfg.notification_reply_target.clone(),
+                server_cfg.notification_symbols.clone(),
+                server_cfg.notification_types.clone(),
+                tx.clone(),
+            ));
+        }
+    }
+
     drop(tx); // Drop our copy so rx closes when all channels stop
 
     let channels_by_name = Arc::new(
