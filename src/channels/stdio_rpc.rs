@@ -15,7 +15,7 @@ pub fn print_deprecation_notice() {
          Use the ACP HTTP API instead:\n\
          \n\
          1. Start the gateway:  hrafn gateway\n\
-         2. Connect to:         http://localhost:3000\n\
+         2. Connect to:         http://localhost:42617 (or your configured gateway port)\n\
          \n\
          Migration guide:\n\
          \n\

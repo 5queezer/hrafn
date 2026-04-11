@@ -9476,6 +9476,12 @@ impl Config {
 
             decrypt_optional_secret(
                 &store,
+                &mut config.acp.bearer_token,
+                "config.acp.bearer_token",
+            )?;
+
+            decrypt_optional_secret(
+                &store,
                 &mut config.storage.provider.config.db_url,
                 "config.storage.provider.config.db_url",
             )?;

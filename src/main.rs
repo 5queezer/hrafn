@@ -876,6 +876,12 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Short-circuit deprecated stdio-rpc before config/secret initialization
+    if matches!(cli.command, Commands::StdioRpc { .. }) {
+        channels::stdio_rpc::print_deprecation_notice();
+        return Ok(());
+    }
+
     // Initialize logging - respects RUST_LOG env var, defaults to INFO
     let subscriber = fmt::Subscriber::builder()
         .with_env_filter(
@@ -1033,7 +1039,9 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Commands::Onboard { .. } | Commands::Completions { .. } => unreachable!(),
+        Commands::Onboard { .. } | Commands::Completions { .. } | Commands::StdioRpc { .. } => {
+            unreachable!()
+        }
 
         Commands::Agent {
             message,
@@ -1058,14 +1066,6 @@ async fn main() -> Result<()> {
             ))
             .await
             .map(|_| ())
-        }
-
-        Commands::StdioRpc {
-            max_sessions: _,
-            session_timeout: _,
-        } => {
-            channels::stdio_rpc::print_deprecation_notice();
-            Ok(())
         }
 
         #[cfg(feature = "gateway")]

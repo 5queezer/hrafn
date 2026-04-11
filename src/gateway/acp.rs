@@ -26,6 +26,7 @@ pub enum AcpErrorCode {
     ServerError,
     InvalidInput,
     NotFound,
+    Unauthorized,
 }
 
 /// ACP error response.
@@ -43,6 +44,7 @@ impl IntoResponse for AcpError {
             AcpErrorCode::ServerError => StatusCode::INTERNAL_SERVER_ERROR,
             AcpErrorCode::InvalidInput => StatusCode::BAD_REQUEST,
             AcpErrorCode::NotFound => StatusCode::NOT_FOUND,
+            AcpErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
         };
         (status, Json(self)).into_response()
     }
@@ -505,8 +507,12 @@ pub async fn handle_ping() -> impl IntoResponse {
 /// `GET /agents` — paginated agent listing.
 pub async fn handle_agents_list(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<AgentsListQuery>,
-) -> impl IntoResponse {
+) -> Result<Json<AgentsListResponse>, AcpError> {
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
     let registry = &state.acp_agent_registry;
     let manifests: Vec<AgentManifest> = registry
         .iter()
@@ -514,14 +520,18 @@ pub async fn handle_agents_list(
         .take(query.limit)
         .map(manifest_from_def)
         .collect();
-    Json(AgentsListResponse { agents: manifests })
+    Ok(Json(AgentsListResponse { agents: manifests }))
 }
 
 /// `GET /agents/{name}` — single agent lookup.
 pub async fn handle_agent_get(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(name): Path<String>,
 ) -> Result<Json<AgentManifest>, AcpError> {
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
     let registry = &state.acp_agent_registry;
     registry
         .iter()
@@ -548,7 +558,7 @@ fn check_bearer_auth(
     };
     let Some(auth) = headers.get(header::AUTHORIZATION) else {
         return Err(AcpError {
-            code: AcpErrorCode::InvalidInput,
+            code: AcpErrorCode::Unauthorized,
             message: "Missing Authorization header".into(),
             data: None,
         });
@@ -557,7 +567,7 @@ fn check_bearer_auth(
     let token = auth_str.strip_prefix("Bearer ").unwrap_or("");
     if !crate::security::pairing::constant_time_eq(token, expected) {
         return Err(AcpError {
-            code: AcpErrorCode::InvalidInput,
+            code: AcpErrorCode::Unauthorized,
             message: "Invalid bearer token".into(),
             data: None,
         });
@@ -1353,7 +1363,7 @@ mod tests {
         let headers = HeaderMap::new();
         let config = make_acp_config(Some("secret-token"));
         let err = check_bearer_auth(&headers, &config).unwrap_err();
-        assert_eq!(err.code, AcpErrorCode::InvalidInput);
+        assert_eq!(err.code, AcpErrorCode::Unauthorized);
         assert!(err.message.contains("Missing"));
     }
 
@@ -1363,7 +1373,7 @@ mod tests {
         headers.insert(header::AUTHORIZATION, "Bearer wrong-token".parse().unwrap());
         let config = make_acp_config(Some("secret-token"));
         let err = check_bearer_auth(&headers, &config).unwrap_err();
-        assert_eq!(err.code, AcpErrorCode::InvalidInput);
+        assert_eq!(err.code, AcpErrorCode::Unauthorized);
         assert!(err.message.contains("Invalid"));
     }
 
@@ -1385,7 +1395,7 @@ mod tests {
         let config = make_acp_config(Some("secret-token"));
         // Without "Bearer " prefix, the token will be empty string → should fail
         let err = check_bearer_auth(&headers, &config).unwrap_err();
-        assert_eq!(err.code, AcpErrorCode::InvalidInput);
+        assert_eq!(err.code, AcpErrorCode::Unauthorized);
     }
 
     // ── apply_agent_def_overrides tests ────────────────────────
