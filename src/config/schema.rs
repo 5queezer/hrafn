@@ -948,6 +948,19 @@ pub struct McpServerConfig {
     /// Optional per-call timeout in seconds (hard capped in validation).
     #[serde(default)]
     pub tool_timeout_secs: Option<u64>,
+    /// Subscribe to push notifications on connect.
+    #[serde(default)]
+    pub subscribe_notifications: bool,
+    /// Filter notifications by symbols (empty = all).
+    #[serde(default)]
+    pub notification_symbols: Vec<String>,
+    /// Filter notifications by alert types (empty = all).
+    #[serde(default)]
+    pub notification_types: Vec<String>,
+    /// Reply target for notification-generated messages (e.g. a Telegram chat ID).
+    /// Falls back to empty string if not set.
+    #[serde(default)]
+    pub notification_reply_target: String,
     /// Tool names (or glob patterns) that should be loaded eagerly even when
     /// `deferred_loading` is true. Useful for high-frequency tools like memory
     /// or shell that the LLM needs on every turn without a tool_search roundtrip.
@@ -16048,6 +16061,50 @@ require_otp_to_resume = true
         let cfg = McpConfig::default();
         assert!(!cfg.enabled);
         assert!(cfg.servers.is_empty());
+    }
+
+    #[test]
+    async fn mcp_server_config_notification_fields_default_correctly() {
+        let cfg = McpServerConfig::default();
+        assert!(!cfg.subscribe_notifications);
+        assert!(cfg.notification_symbols.is_empty());
+        assert!(cfg.notification_types.is_empty());
+        assert!(cfg.notification_reply_target.is_empty());
+    }
+
+    #[test]
+    async fn mcp_server_config_notification_fields_deserialize() {
+        let json = r#"{
+            "name": "charts",
+            "transport": "sse",
+            "url": "https://example.com/mcp",
+            "subscribe_notifications": true,
+            "notification_symbols": ["BTC/USDT", "ETH/USDT"],
+            "notification_types": ["price_above", "indicator_signal"],
+            "notification_reply_target": "telegram:12345"
+        }"#;
+        let cfg: McpServerConfig = serde_json::from_str(json).expect("deserialize");
+        assert!(cfg.subscribe_notifications);
+        assert_eq!(cfg.notification_symbols, vec!["BTC/USDT", "ETH/USDT"]);
+        assert_eq!(
+            cfg.notification_types,
+            vec!["price_above", "indicator_signal"]
+        );
+        assert_eq!(cfg.notification_reply_target, "telegram:12345");
+    }
+
+    #[test]
+    async fn mcp_server_config_without_notification_fields_deserializes() {
+        let json = r#"{
+            "name": "fs",
+            "transport": "stdio",
+            "command": "/usr/bin/mcp-fs"
+        }"#;
+        let cfg: McpServerConfig = serde_json::from_str(json).expect("deserialize");
+        assert!(!cfg.subscribe_notifications);
+        assert!(cfg.notification_symbols.is_empty());
+        assert!(cfg.notification_types.is_empty());
+        assert!(cfg.notification_reply_target.is_empty());
     }
 
     #[test]
