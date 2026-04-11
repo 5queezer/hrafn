@@ -1090,11 +1090,16 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         inner
     };
 
-    // ── ACP (Agent Communication Protocol) discovery routes ──
+    // ── ACP (Agent Communication Protocol) routes ──
     let inner = inner
         .route("/ping", get(acp::handle_ping))
         .route("/agents", get(acp::handle_agents_list))
-        .route("/agents/{name}", get(acp::handle_agent_get));
+        .route("/agents/{name}", get(acp::handle_agent_get))
+        .route("/runs", post(acp::handle_run_create))
+        .route("/runs/{run_id}", get(acp::handle_run_get))
+        .route("/runs/{run_id}/cancel", post(acp::handle_run_cancel))
+        .route("/runs/{run_id}/events", get(acp::handle_run_events))
+        .route("/session/{session_id}", get(acp::handle_session_get));
 
     // ── WebAuthn hardware key authentication API (requires webauthn feature) ──
     #[cfg(feature = "webauthn")]

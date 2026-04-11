@@ -5,7 +5,7 @@ use crate::config::{AcpAgentDef, AcpCapability, Config};
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use chrono::{DateTime, Utc};
@@ -534,7 +534,403 @@ pub async fn handle_agent_get(
         })
 }
 
-// ── Tests ───────────────────────────────────────────────────────
+// ── Bearer Auth ────────────────────────────────────────────────
+
+/// Validate the `Authorization: Bearer <token>` header against the configured
+/// ACP bearer token. Returns `Ok(())` when no token is configured (open access)
+/// or when the provided token matches.
+fn check_bearer_auth(
+    headers: &HeaderMap,
+    config: &crate::config::AcpConfig,
+) -> Result<(), AcpError> {
+    let Some(expected) = &config.bearer_token else {
+        return Ok(()); // no auth configured
+    };
+    let Some(auth) = headers.get(header::AUTHORIZATION) else {
+        return Err(AcpError {
+            code: AcpErrorCode::InvalidInput,
+            message: "Missing Authorization header".into(),
+            data: None,
+        });
+    };
+    let auth_str = auth.to_str().unwrap_or("");
+    let token = auth_str.strip_prefix("Bearer ").unwrap_or("");
+    if !crate::security::pairing::constant_time_eq(token, expected) {
+        return Err(AcpError {
+            code: AcpErrorCode::InvalidInput,
+            message: "Invalid bearer token".into(),
+            data: None,
+        });
+    }
+    Ok(())
+}
+
+// ── Run Handlers ──────────────────────────────────────────────
+
+/// `POST /runs` — create and execute a new run.
+///
+/// Dispatches to sync, async, or stream mode based on `mode` in the request
+/// (defaults to sync when omitted).
+pub async fn handle_run_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<RunCreateRequest>,
+) -> Result<axum::response::Response, AcpError> {
+    // ── Auth ──
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
+    // ── Validate agent ──
+    let registry = &state.acp_agent_registry;
+    let agent_def = registry
+        .iter()
+        .find(|def| def.name == req.agent_name)
+        .cloned()
+        .ok_or_else(|| AcpError {
+            code: AcpErrorCode::NotFound,
+            message: format!("agent '{}' not found", req.agent_name),
+            data: None,
+        })?;
+
+    // ── Concurrency check ──
+    let active = state.acp_run_store.active_run_count().await;
+    if active >= acp_config.max_concurrent_runs {
+        return Err(AcpError {
+            code: AcpErrorCode::ServerError,
+            message: format!(
+                "max concurrent runs ({}) exceeded",
+                acp_config.max_concurrent_runs
+            ),
+            data: None,
+        });
+    }
+
+    // ── Build run ──
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let session_id = req
+        .session_id
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let mode = req.mode.unwrap_or(RunMode::Sync);
+
+    // Extract user message: join all parts' content from all input messages
+    let user_message: String = req
+        .input
+        .iter()
+        .flat_map(|msg| msg.parts.iter())
+        .filter_map(|part| part.content.as_deref())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let run = Run {
+        agent_name: req.agent_name.clone(),
+        session_id: session_id.clone(),
+        run_id: run_id.clone(),
+        status: RunStatus::Created,
+        await_request: None,
+        output: vec![],
+        error: None,
+        created_at: Some(Utc::now()),
+        finished_at: None,
+    };
+
+    state.acp_run_store.insert(run.clone()).await;
+
+    match mode {
+        RunMode::Sync => handle_run_sync(state, run, agent_def, user_message).await,
+        RunMode::Async => handle_run_async(state, run, agent_def, user_message).await,
+        RunMode::Stream => handle_run_stream(state, run, agent_def, user_message).await,
+    }
+}
+
+/// Execute a run synchronously — block until the agent completes.
+async fn handle_run_sync(
+    state: AppState,
+    run: Run,
+    agent_def: AcpAgentDef,
+    user_message: String,
+) -> Result<axum::response::Response, AcpError> {
+    let run_id = run.run_id.clone();
+
+    state
+        .acp_run_store
+        .update_status(&run_id, RunStatus::InProgress)
+        .await;
+
+    let result = execute_agent(&state, &agent_def, &user_message).await;
+
+    match result {
+        Ok(response_text) => {
+            let output = vec![Message {
+                role: "agent".into(),
+                parts: vec![MessagePart {
+                    name: None,
+                    content_type: "text/plain".into(),
+                    content: Some(response_text),
+                    content_encoding: None,
+                    content_url: None,
+                    metadata: None,
+                }],
+                created_at: Some(Utc::now()),
+                completed_at: Some(Utc::now()),
+            }];
+            state.acp_run_store.set_output(&run_id, output).await;
+            state
+                .acp_run_store
+                .update_status(&run_id, RunStatus::Completed)
+                .await;
+        }
+        Err(e) => {
+            let error = AcpError {
+                code: AcpErrorCode::ServerError,
+                message: format!("{e}"),
+                data: None,
+            };
+            state.acp_run_store.set_error(&run_id, error).await;
+            state
+                .acp_run_store
+                .update_status(&run_id, RunStatus::Failed)
+                .await;
+        }
+    }
+
+    let completed_run = state
+        .acp_run_store
+        .get(&run_id)
+        .await
+        .ok_or_else(|| AcpError {
+            code: AcpErrorCode::ServerError,
+            message: "run disappeared from store".into(),
+            data: None,
+        })?;
+
+    Ok((StatusCode::OK, Json(completed_run)).into_response())
+}
+
+/// Execute a run asynchronously — return 202 immediately, spawn background task.
+async fn handle_run_async(
+    state: AppState,
+    run: Run,
+    agent_def: AcpAgentDef,
+    user_message: String,
+) -> Result<axum::response::Response, AcpError> {
+    let run_id = run.run_id.clone();
+
+    // Spawn background execution
+    let bg_state = state.clone();
+    let bg_run_id = run_id.clone();
+    tokio::spawn(async move {
+        bg_state
+            .acp_run_store
+            .update_status(&bg_run_id, RunStatus::InProgress)
+            .await;
+
+        let result = execute_agent(&bg_state, &agent_def, &user_message).await;
+
+        match result {
+            Ok(response_text) => {
+                let output = vec![Message {
+                    role: "agent".into(),
+                    parts: vec![MessagePart {
+                        name: None,
+                        content_type: "text/plain".into(),
+                        content: Some(response_text),
+                        content_encoding: None,
+                        content_url: None,
+                        metadata: None,
+                    }],
+                    created_at: Some(Utc::now()),
+                    completed_at: Some(Utc::now()),
+                }];
+                bg_state.acp_run_store.set_output(&bg_run_id, output).await;
+                bg_state
+                    .acp_run_store
+                    .update_status(&bg_run_id, RunStatus::Completed)
+                    .await;
+            }
+            Err(e) => {
+                let error = AcpError {
+                    code: AcpErrorCode::ServerError,
+                    message: format!("{e}"),
+                    data: None,
+                };
+                bg_state.acp_run_store.set_error(&bg_run_id, error).await;
+                bg_state
+                    .acp_run_store
+                    .update_status(&bg_run_id, RunStatus::Failed)
+                    .await;
+            }
+        }
+    });
+
+    // Return the run as it was at creation time (status: Created)
+    let created_run = state
+        .acp_run_store
+        .get(&run_id)
+        .await
+        .ok_or_else(|| AcpError {
+            code: AcpErrorCode::ServerError,
+            message: "run disappeared from store".into(),
+            data: None,
+        })?;
+
+    Ok((StatusCode::ACCEPTED, Json(created_run)).into_response())
+}
+
+/// Execute a run in stream mode — return SSE event stream.
+///
+/// Placeholder: stream mode will be implemented in a follow-up commit.
+async fn handle_run_stream(
+    state: AppState,
+    run: Run,
+    _agent_def: AcpAgentDef,
+    _user_message: String,
+) -> Result<axum::response::Response, AcpError> {
+    // Mark the run as failed since stream mode is not yet implemented
+    state
+        .acp_run_store
+        .update_status(&run.run_id, RunStatus::Failed)
+        .await;
+    Err(AcpError {
+        code: AcpErrorCode::InvalidInput,
+        message: "stream mode not yet implemented".into(),
+        data: None,
+    })
+}
+
+/// Build an `Agent` from a config, applying agent-def overrides, and execute a turn.
+async fn execute_agent(
+    state: &AppState,
+    agent_def: &AcpAgentDef,
+    user_message: &str,
+) -> anyhow::Result<String> {
+    let mut config = state.config.lock().clone();
+    apply_agent_def_overrides(&mut config, agent_def);
+
+    let mut agent = crate::agent::Agent::from_config(&config).await?;
+    agent.turn(user_message).await
+}
+
+/// Apply agent-def overrides (system_prompt, model) to a cloned config.
+fn apply_agent_def_overrides(config: &mut Config, agent_def: &AcpAgentDef) {
+    if let Some(ref sp) = agent_def.system_prompt {
+        config.identity.aieos_inline = Some(sp.clone());
+    }
+    if let Some(ref model) = agent_def.model {
+        config.default_model = Some(model.clone());
+    }
+}
+
+/// `GET /runs/{run_id}` — retrieve run status and output.
+pub async fn handle_run_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> Result<Json<Run>, AcpError> {
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
+    state
+        .acp_run_store
+        .get(&run_id)
+        .await
+        .map(Json)
+        .ok_or_else(|| AcpError {
+            code: AcpErrorCode::NotFound,
+            message: format!("run '{run_id}' not found"),
+            data: None,
+        })
+}
+
+/// `GET /runs/{run_id}/events` — retrieve stored events for a run.
+pub async fn handle_run_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> Result<Json<RunEventsListResponse>, AcpError> {
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
+    // Verify run exists
+    if state.acp_run_store.get(&run_id).await.is_none() {
+        return Err(AcpError {
+            code: AcpErrorCode::NotFound,
+            message: format!("run '{run_id}' not found"),
+            data: None,
+        });
+    }
+
+    let events = state.acp_run_store.get_events(&run_id).await;
+    Ok(Json(RunEventsListResponse { events }))
+}
+
+/// `POST /runs/{run_id}/cancel` — cancel an active run.
+pub async fn handle_run_cancel(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> Result<(StatusCode, Json<Run>), AcpError> {
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
+    let run = state
+        .acp_run_store
+        .get(&run_id)
+        .await
+        .ok_or_else(|| AcpError {
+            code: AcpErrorCode::NotFound,
+            message: format!("run '{run_id}' not found"),
+            data: None,
+        })?;
+
+    if run.status.is_terminal() {
+        return Err(AcpError {
+            code: AcpErrorCode::InvalidInput,
+            message: format!(
+                "run '{run_id}' is already in terminal state {:?}",
+                run.status
+            ),
+            data: None,
+        });
+    }
+
+    state
+        .acp_run_store
+        .update_status(&run_id, RunStatus::Cancelled)
+        .await;
+
+    let updated = state
+        .acp_run_store
+        .get(&run_id)
+        .await
+        .ok_or_else(|| AcpError {
+            code: AcpErrorCode::ServerError,
+            message: "run disappeared from store".into(),
+            data: None,
+        })?;
+
+    Ok((StatusCode::OK, Json(updated)))
+}
+
+/// `GET /session/{session_id}` — retrieve session history.
+pub async fn handle_session_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<AcpSession>, AcpError> {
+    let acp_config = { state.config.lock().acp.clone() };
+    check_bearer_auth(&headers, &acp_config)?;
+
+    let run_ids = state.acp_run_store.runs_for_session(&session_id).await;
+    let history: Vec<String> = run_ids
+        .into_iter()
+        .map(|id| format!("/runs/{id}"))
+        .collect();
+
+    Ok(Json(AcpSession {
+        id: session_id,
+        history,
+    }))
+}
 
 // ── Run Eviction ───────────────────────────────────────────────
 
@@ -720,5 +1116,103 @@ mod tests {
         };
         let manifest = manifest_from_def(&def);
         assert_eq!(manifest.metadata.as_ref().unwrap().framework, "hrafn");
+    }
+
+    // ── Bearer auth tests ──────────────────────────────────────
+
+    fn make_acp_config(token: Option<&str>) -> crate::config::AcpConfig {
+        crate::config::AcpConfig {
+            bearer_token: token.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn bearer_auth_no_token_configured() {
+        let headers = HeaderMap::new();
+        let config = make_acp_config(None);
+        assert!(check_bearer_auth(&headers, &config).is_ok());
+    }
+
+    #[test]
+    fn bearer_auth_missing_header() {
+        let headers = HeaderMap::new();
+        let config = make_acp_config(Some("secret-token"));
+        let err = check_bearer_auth(&headers, &config).unwrap_err();
+        assert_eq!(err.code, AcpErrorCode::InvalidInput);
+        assert!(err.message.contains("Missing"));
+    }
+
+    #[test]
+    fn bearer_auth_wrong_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, "Bearer wrong-token".parse().unwrap());
+        let config = make_acp_config(Some("secret-token"));
+        let err = check_bearer_auth(&headers, &config).unwrap_err();
+        assert_eq!(err.code, AcpErrorCode::InvalidInput);
+        assert!(err.message.contains("Invalid"));
+    }
+
+    #[test]
+    fn bearer_auth_correct_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer secret-token".parse().unwrap(),
+        );
+        let config = make_acp_config(Some("secret-token"));
+        assert!(check_bearer_auth(&headers, &config).is_ok());
+    }
+
+    #[test]
+    fn bearer_auth_no_bearer_prefix() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, "secret-token".parse().unwrap());
+        let config = make_acp_config(Some("secret-token"));
+        // Without "Bearer " prefix, the token will be empty string → should fail
+        let err = check_bearer_auth(&headers, &config).unwrap_err();
+        assert_eq!(err.code, AcpErrorCode::InvalidInput);
+    }
+
+    // ── apply_agent_def_overrides tests ────────────────────────
+
+    #[test]
+    fn agent_def_overrides_model_and_prompt() {
+        let mut config = Config::default();
+        let def = AcpAgentDef {
+            name: "test".into(),
+            description: "test".into(),
+            system_prompt: Some("custom prompt".into()),
+            model: Some("gpt-4".into()),
+            tools: vec![],
+            input_content_types: vec![],
+            output_content_types: vec![],
+            capabilities: vec![],
+        };
+        apply_agent_def_overrides(&mut config, &def);
+        assert_eq!(config.default_model.as_deref(), Some("gpt-4"));
+        assert_eq!(
+            config.identity.aieos_inline.as_deref(),
+            Some("custom prompt")
+        );
+    }
+
+    #[test]
+    fn agent_def_no_overrides_preserves_config() {
+        let mut config = Config::default();
+        config.default_model = Some("original-model".into());
+        let def = AcpAgentDef {
+            name: "test".into(),
+            description: "test".into(),
+            system_prompt: None,
+            model: None,
+            tools: vec![],
+            input_content_types: vec![],
+            output_content_types: vec![],
+            capabilities: vec![],
+        };
+        apply_agent_def_overrides(&mut config, &def);
+        assert_eq!(config.default_model.as_deref(), Some("original-model"));
+        assert!(config.identity.aieos_inline.is_none());
     }
 }
