@@ -14,6 +14,21 @@ use crate::tools::mcp_protocol::McpToolDef;
 use crate::tools::mcp_tool::McpToolWrapper;
 use crate::tools::traits::{Tool, ToolSpec};
 
+// ── ToolSearchStrategy ───────────────────────────────────────────────────
+
+/// Strategy for ranking deferred tool stubs given a free-text query.
+/// Implementations may use BM25, embedding similarity, regex, etc.
+pub trait ToolSearchStrategy: Send + Sync {
+    /// Return up to `max_k` stubs ranked by relevance to `query`.
+    /// Stubs with zero relevance SHOULD be omitted.
+    fn search<'a>(
+        &self,
+        stubs: &'a [DeferredMcpToolStub],
+        query: &str,
+        max_k: usize,
+    ) -> Vec<&'a DeferredMcpToolStub>;
+}
+
 // ── BM25 Index ──────────────────────────────────────────────────────────
 
 /// Precomputed corpus statistics for BM25 scoring.
@@ -126,7 +141,89 @@ impl BM25Index {
     }
 }
 
+// ── BM25Strategy ─────────────────────────────────────────────────────────
+
+/// [`ToolSearchStrategy`] backed by Okapi BM25 (the default strategy).
+pub struct BM25Strategy {
+    index: BM25Index,
+}
+
+impl BM25Strategy {
+    pub(crate) fn build(stubs: &[DeferredMcpToolStub]) -> Self {
+        Self {
+            index: BM25Index::build(stubs),
+        }
+    }
+}
+
+impl ToolSearchStrategy for BM25Strategy {
+    fn search<'a>(
+        &self,
+        stubs: &'a [DeferredMcpToolStub],
+        query: &str,
+        max_k: usize,
+    ) -> Vec<&'a DeferredMcpToolStub> {
+        let terms: Vec<String> = query
+            .split(|c: char| c.is_whitespace() || c == '_' || c == '-')
+            .filter(|s| !s.is_empty())
+            .map(|t| t.to_ascii_lowercase())
+            .collect();
+        if terms.is_empty() {
+            return stubs.iter().take(max_k).collect();
+        }
+
+        let idfs = self.index.precompute_idfs(&terms);
+
+        let mut scored: Vec<(usize, f64)> = stubs
+            .iter()
+            .enumerate()
+            .map(|(idx, _)| (idx, self.index.score(&terms, &idfs, idx)))
+            .filter(|(_, score)| *score > 0.0)
+            .collect();
+
+        // Sort by score descending, then by name ascending for deterministic tie-breaking.
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| stubs[a.0].prefixed_name.cmp(&stubs[b.0].prefixed_name))
+        });
+        scored
+            .into_iter()
+            .take(max_k)
+            .map(|(idx, _)| &stubs[idx])
+            .collect()
+    }
+}
+
 // ── DeferredMcpToolStub ──────────────────────────────────────────────────
+
+/// Shorten a description to its first sentence (up to ". "), capped at 120
+/// characters. Falls back to the full text truncated at 120 characters with
+/// "…". Whitespace (newlines, tabs, runs of spaces) is collapsed to single
+/// spaces before truncation. Truncation is always on a character boundary.
+fn shorten(text: &str) -> String {
+    // Normalize: collapse all whitespace runs to a single space and trim.
+    let normalized: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    let raw: &str = if let Some(pos) = normalized.find(". ") {
+        &normalized[..=pos]
+    } else {
+        &normalized
+    };
+
+    if raw.chars().count() <= 120 {
+        raw.to_string()
+    } else {
+        // char_indices().nth(119) yields the byte offset of the 120th character,
+        // which is always a valid UTF-8 boundary.
+        let end = raw
+            .char_indices()
+            .nth(119)
+            .map(|(i, _)| i)
+            .unwrap_or(raw.len());
+        format!("{}…", &raw[..end])
+    }
+}
 
 /// A lightweight stub representing a known-but-not-yet-loaded MCP tool.
 /// Contains only the prefixed name, a human-readable description, and enough
@@ -137,6 +234,8 @@ pub struct DeferredMcpToolStub {
     pub prefixed_name: String,
     /// Human-readable description (extracted from the MCP tool definition).
     pub description: String,
+    /// Short form of description (≤ 120 chars) for system-prompt stubs.
+    pub stub_description: String,
     /// The full tool definition — stored so we can construct a wrapper later.
     def: McpToolDef,
 }
@@ -147,9 +246,11 @@ impl DeferredMcpToolStub {
             .description
             .clone()
             .unwrap_or_else(|| "MCP tool".to_string());
+        let stub_description = shorten(&description);
         Self {
             prefixed_name,
             description,
+            stub_description,
             def,
         }
     }
@@ -163,15 +264,15 @@ impl DeferredMcpToolStub {
 // ── DeferredMcpToolSet ───────────────────────────────────────────────────
 
 /// Collection of all deferred MCP tool stubs discovered at startup.
-/// Provides BM25-ranked keyword search for `tool_search`.
+/// Provides keyword search for `tool_search` via a pluggable [`ToolSearchStrategy`].
 #[derive(Clone)]
 pub struct DeferredMcpToolSet {
     /// All stubs — exposed for test construction.
     pub stubs: Vec<DeferredMcpToolStub>,
     /// Shared registry — exposed for test construction.
     pub registry: Arc<McpRegistry>,
-    /// Precomputed BM25 index over stub names + descriptions.
-    bm25: Arc<BM25Index>,
+    /// Search strategy used to rank stubs by relevance.
+    strategy: Arc<dyn ToolSearchStrategy>,
 }
 
 impl DeferredMcpToolSet {
@@ -188,21 +289,35 @@ impl DeferredMcpToolSet {
                 stubs.push(DeferredMcpToolStub::new(name, def));
             }
         }
-        let bm25 = Arc::new(BM25Index::build(&stubs));
+        let strategy: Arc<dyn ToolSearchStrategy> = Arc::new(BM25Strategy::build(&stubs));
         Self {
             stubs,
             registry,
-            bm25,
+            strategy,
         }
     }
 
     /// Build from pre-constructed stubs (for tests and internal use).
     pub(crate) fn from_stubs(stubs: Vec<DeferredMcpToolStub>, registry: Arc<McpRegistry>) -> Self {
-        let bm25 = Arc::new(BM25Index::build(&stubs));
+        let strategy: Arc<dyn ToolSearchStrategy> = Arc::new(BM25Strategy::build(&stubs));
         Self {
             stubs,
             registry,
-            bm25,
+            strategy,
+        }
+    }
+
+    /// Build from pre-constructed stubs with a custom search strategy.
+    /// Intended for tests and callers that need a non-BM25 strategy.
+    pub fn with_strategy(
+        stubs: Vec<DeferredMcpToolStub>,
+        registry: Arc<McpRegistry>,
+        strategy: Arc<dyn ToolSearchStrategy>,
+    ) -> Self {
+        Self {
+            stubs,
+            registry,
+            strategy,
         }
     }
 
@@ -229,43 +344,10 @@ impl DeferredMcpToolSet {
         self.stubs.iter().find(|s| s.prefixed_name == name)
     }
 
-    /// BM25 keyword search — returns stubs ranked by Okapi BM25 relevance.
-    /// Query is tokenized on whitespace, underscores, and hyphens.
+    /// Keyword search — returns stubs ranked by the configured [`ToolSearchStrategy`].
+    /// Defaults to Okapi BM25; use [`with_strategy`] to supply an alternative.
     pub fn search(&self, query: &str, max_results: usize) -> Vec<&DeferredMcpToolStub> {
-        let terms: Vec<String> = query
-            .split(|c: char| c.is_whitespace() || c == '_' || c == '-')
-            .filter(|s| !s.is_empty())
-            .map(|t| t.to_ascii_lowercase())
-            .collect();
-        if terms.is_empty() {
-            return self.stubs.iter().take(max_results).collect();
-        }
-
-        let idfs = self.bm25.precompute_idfs(&terms);
-
-        let mut scored: Vec<(usize, f64)> = self
-            .stubs
-            .iter()
-            .enumerate()
-            .map(|(idx, _)| (idx, self.bm25.score(&terms, &idfs, idx)))
-            .filter(|(_, score)| *score > 0.0)
-            .collect();
-
-        // Sort by score descending, then by name ascending for deterministic tie-breaking.
-        scored.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| {
-                    self.stubs[a.0]
-                        .prefixed_name
-                        .cmp(&self.stubs[b.0].prefixed_name)
-                })
-        });
-        scored
-            .into_iter()
-            .take(max_results)
-            .map(|(idx, _)| &self.stubs[idx])
-            .collect()
+        self.strategy.search(&self.stubs, query, max_results)
     }
 
     /// Activate a stub by name, returning a boxed [`Tool`].
@@ -428,9 +510,9 @@ impl Default for ActivatedToolSet {
 // ── System prompt helper ─────────────────────────────────────────────────
 
 /// Build the `<available-deferred-tools>` section for the system prompt.
-/// Lists only tool names so the LLM knows what is available without
-/// consuming context window on full schemas. Includes an instruction
-/// block that tells the LLM to call `tool_search` to activate them.
+/// Lists tool stubs (`name - stub_description`) so the LLM knows what is
+/// available without consuming context window on full schemas. Includes an
+/// instruction block that tells the LLM to call `tool_search` to activate them.
 pub fn build_deferred_tools_section(deferred: &DeferredMcpToolSet) -> String {
     if deferred.is_empty() {
         return String::new();
@@ -448,7 +530,7 @@ pub fn build_deferred_tools_section(deferred: &DeferredMcpToolSet) -> String {
     for stub in &deferred.stubs {
         out.push_str(&stub.prefixed_name);
         out.push_str(" - ");
-        out.push_str(&stub.description);
+        out.push_str(&stub.stub_description);
         out.push('\n');
     }
     out.push_str("</available-deferred-tools>\n");
@@ -483,6 +565,40 @@ mod tests {
     fn stub_uses_description_from_def() {
         let stub = make_stub("fs__read", "Read a file");
         assert_eq!(stub.description, "Read a file");
+    }
+
+    #[test]
+    fn shorten_normalizes_whitespace_and_truncates_on_char_boundary() {
+        // Embedded newline: sentence detection works after normalization.
+        let stub = make_stub("t__a", "First sentence.\nSecond sentence follows.");
+        assert_eq!(stub.stub_description, "First sentence.");
+
+        // Leading/trailing whitespace and tab are trimmed.
+        let stub = make_stub("t__b", "  \t  Clean description.  \n ");
+        assert_eq!(stub.stub_description, "Clean description.");
+
+        // 125 emoji (4 bytes each) = 125 characters > 120 → truncated.
+        // char_indices().nth(119) slices before the 120th char, so 119 chars
+        // remain before the ellipsis.
+        let desc: String = "🔥".repeat(125);
+        let stub = make_stub("t__c", &desc);
+        assert!(stub.stub_description.ends_with('…'));
+        let before = stub.stub_description.trim_end_matches('…');
+        assert_eq!(before.chars().count(), 119);
+        assert!(std::str::from_utf8(stub.stub_description.as_bytes()).is_ok());
+
+        // 122 accented chars (é = 2 bytes each) = 122 chars > 120 → truncated.
+        let desc: String = "é".repeat(122);
+        let stub = make_stub("t__d", &desc);
+        assert!(stub.stub_description.ends_with('…'));
+        let before = stub.stub_description.trim_end_matches('…');
+        assert_eq!(before.chars().count(), 119);
+
+        // Exactly 120 chars → passes through unchanged (no ellipsis).
+        let desc: String = "é".repeat(120);
+        let stub = make_stub("t__e", &desc);
+        assert!(!stub.stub_description.ends_with('…'));
+        assert_eq!(stub.stub_description.chars().count(), 120);
     }
 
     #[test]
@@ -717,6 +833,68 @@ mod tests {
         let results = set.search("config database", 10);
         assert!(!results.is_empty());
         assert_eq!(results[0].prefixed_name, "server_b__read_config");
+    }
+
+    #[test]
+    fn build_deferred_section_uses_stub_description_not_full() {
+        // A description longer than 120 chars — the section should contain the
+        // truncated stub_description, not the full description.
+        let long_desc = "This is a very long description that intentionally exceeds one hundred and twenty characters so we can verify truncation behaviour in the system prompt section.";
+        assert!(long_desc.len() > 120);
+        let set = make_set(vec![make_stub("srv__tool", long_desc)]);
+        let stub = &set.stubs[0];
+        let section = build_deferred_tools_section(&set);
+        // The full description must NOT appear verbatim.
+        assert!(
+            !section.contains(long_desc),
+            "section must not contain the full long description"
+        );
+        // The stub_description (truncated form) must appear.
+        assert!(
+            section.contains(&stub.stub_description),
+            "section must contain the stub_description"
+        );
+        assert!(stub.stub_description.ends_with('…'));
+    }
+
+    #[test]
+    fn custom_strategy_is_used() {
+        use std::sync::Arc;
+
+        /// A trivial strategy that always returns stubs in their original order,
+        /// regardless of the query — useful for verifying `with_strategy` wiring.
+        struct FixedOrderStrategy;
+
+        impl ToolSearchStrategy for FixedOrderStrategy {
+            fn search<'a>(
+                &self,
+                stubs: &'a [DeferredMcpToolStub],
+                _query: &str,
+                max_k: usize,
+            ) -> Vec<&'a DeferredMcpToolStub> {
+                stubs.iter().take(max_k).collect()
+            }
+        }
+
+        let registry = Arc::new(
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(McpRegistry::connect_all(&[]))
+                .unwrap(),
+        );
+        let stubs = vec![
+            make_stub("a__first", "First tool"),
+            make_stub("b__second", "Second tool"),
+            make_stub("c__third", "Third tool"),
+        ];
+        let set = DeferredMcpToolSet::with_strategy(stubs, registry, Arc::new(FixedOrderStrategy));
+
+        // Regardless of query, FixedOrderStrategy returns stubs in original order.
+        let results = set.search("second", 3);
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].prefixed_name, "a__first");
+        assert_eq!(results[1].prefixed_name, "b__second");
+        assert_eq!(results[2].prefixed_name, "c__third");
     }
 
     #[test]
