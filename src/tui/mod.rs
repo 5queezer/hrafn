@@ -278,17 +278,19 @@ impl App {
                 self.push_system("  Ctrl+B  - Toggle sidebar".into());
                 self.push_system("  Ctrl+P  - Toggle command palette".into());
             }
-            _ => {
-                self.messages.push(ChatMessage::User { text: text.clone() });
-                if self.auto_scroll {
-                    self.scroll_offset = u16::MAX;
-                }
-                if tx.try_send(text).is_ok() {
+            _ => match tx.try_send(text.clone()) {
+                Ok(()) => {
+                    self.messages.push(ChatMessage::User { text });
+                    if self.auto_scroll {
+                        self.scroll_offset = u16::MAX;
+                    }
                     self.spinner = Some(SpinnerState::new("pondering"));
-                } else {
+                }
+                Err(_) => {
+                    self.textarea.insert_str(&text);
                     self.push_system("[send failed \u{2014} channel full]".into());
                 }
-            }
+            },
         }
     }
 
@@ -353,9 +355,35 @@ fn run_tui(tx: mpsc::Sender<String>, rx: &mut mpsc::Receiver<String>) -> io::Res
             }
         }
 
-        // Drain incoming agent output (non-blocking)
+        // Drain incoming agent output (non-blocking).
+        // The bridge tags tool events as "[tool:NAME]" / "[result:NAME]".
         while let Ok(line) = rx.try_recv() {
             app.spinner = None;
+            if let Some(rest) = line.strip_prefix("[tool:") {
+                if let Some((name, args)) = rest.split_once("]\n") {
+                    app.messages.push(ChatMessage::ToolCall {
+                        name: name.to_string(),
+                        args: args.to_string(),
+                        status: ToolStatus::Done(std::time::Duration::ZERO),
+                    });
+                    if app.auto_scroll {
+                        app.scroll_offset = u16::MAX;
+                    }
+                    continue;
+                }
+            }
+            if let Some(rest) = line.strip_prefix("[result:") {
+                if let Some((name, output)) = rest.split_once("]\n") {
+                    app.messages.push(ChatMessage::ToolResult {
+                        name: name.to_string(),
+                        output: output.to_string(),
+                    });
+                    if app.auto_scroll {
+                        app.scroll_offset = u16::MAX;
+                    }
+                    continue;
+                }
+            }
             app.push_assistant(line);
         }
 

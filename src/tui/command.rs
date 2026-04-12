@@ -43,7 +43,8 @@ pub(crate) fn render_command_palette(
     let filtered = filter_items(query, items);
     // Reserve 2 lines for query+blank at top and 1 line for hints at bottom
     let max_visible = height.saturating_sub(5) as usize;
-    for (i, item) in filtered.iter().enumerate().take(max_visible) {
+    let start = selected.saturating_sub(max_visible.saturating_sub(1));
+    for (i, item) in filtered.iter().enumerate().skip(start).take(max_visible) {
         let style = if i == selected {
             theme::bold()
         } else {

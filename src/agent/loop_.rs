@@ -5171,27 +5171,40 @@ pub async fn run_tui(
     tracing::info!("TUI: Agent ready, entering message loop");
 
     // ── Message loop ─────────────────────────────────────────────
+    // NOTE: Cancel cannot interrupt an in-flight turn_streamed() call.
+    // A future improvement would accept a CancellationToken in turn_streamed.
     loop {
         match user_rx.recv().await {
             Some(msg) if msg == "__CANCEL__" => {}
             Some(msg) => {
-                match agent.turn_streamed(&msg, event_tx.clone()).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        let _ = event_tx
-                            .send(crate::agent::TurnEvent::Chunk {
-                                delta: format!("\n[error: {e}]"),
-                            })
-                            .await;
+                if let Err(e) = agent.turn_streamed(&msg, event_tx.clone()).await {
+                    // Sanitize: only surface the error kind, not internal details.
+                    let safe_msg = if e.to_string().contains("API") {
+                        "provider API error".to_string()
+                    } else {
+                        "agent error".to_string()
+                    };
+                    if event_tx
+                        .send(crate::agent::TurnEvent::Chunk {
+                            delta: format!("\n[{safe_msg}]"),
+                        })
+                        .await
+                        .is_err()
+                    {
+                        break;
                     }
+                    tracing::error!("TUI turn error: {e:#}");
                 }
-                // Send an empty chunk as end-of-turn marker so the bridge
-                // knows to flush accumulated text to the TUI.
-                let _ = event_tx
+                // End-of-turn marker so the bridge knows the turn finished.
+                if event_tx
                     .send(crate::agent::TurnEvent::Chunk {
                         delta: String::new(),
                     })
-                    .await;
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
             }
             None => break, // TUI closed
         }

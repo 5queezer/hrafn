@@ -3,7 +3,7 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use super::chat::Spinner;
@@ -105,17 +105,29 @@ pub(crate) fn render_sidebar(
         }
     }
 
-    // Inner height is area minus 2 for top/bottom borders
+    // Truncate long lines instead of wrapping so scroll accounting is accurate.
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let truncated: Vec<Line> = lines
+        .into_iter()
+        .map(|line| {
+            let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            if text.chars().count() > inner_width {
+                let truncated_text: String =
+                    text.chars().take(inner_width.saturating_sub(1)).collect();
+                Line::from(format!("{truncated_text}\u{2026}")).style(line.style)
+            } else {
+                line
+            }
+        })
+        .collect();
+
     let inner_height = area.height.saturating_sub(2) as usize;
-    let scroll = if lines.len() > inner_height {
-        u16::try_from(lines.len() - inner_height).unwrap_or(u16::MAX)
+    let scroll = if truncated.len() > inner_height {
+        u16::try_from(truncated.len() - inner_height).unwrap_or(u16::MAX)
     } else {
         0
     };
 
-    let paragraph = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll, 0));
+    let paragraph = Paragraph::new(truncated).block(block).scroll((scroll, 0));
     frame.render_widget(paragraph, area);
 }

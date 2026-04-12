@@ -97,52 +97,31 @@ async fn run_interactive_tui() -> Result<()> {
     let tui_handle = spawn_tui(user_tx, agent_rx);
 
     // Bridge: convert TurnEvents into display strings for the TUI.
+    // Chunks are forwarded incrementally so the TUI can render streaming text.
     let bridge_agent_tx = agent_tx.clone();
     let bridge_handle = tokio::spawn(async move {
-        let mut current_text = String::new();
         while let Some(event) = turn_event_rx.recv().await {
-            match event {
-                TurnEvent::Chunk { delta } => {
-                    if delta.is_empty() {
-                        // Empty chunk = end-of-turn marker; flush accumulated text.
-                        if !current_text.is_empty() {
-                            let _ = bridge_agent_tx.send(current_text.clone()).await;
-                            current_text.clear();
-                        }
-                    } else {
-                        current_text.push_str(&delta);
-                    }
-                }
-                TurnEvent::Thinking { .. } => {
-                    // Skip thinking tokens for now.
-                }
+            let msg = match event {
+                TurnEvent::Chunk { delta } if delta.is_empty() => continue,
+                TurnEvent::Chunk { delta } => delta,
+                TurnEvent::Thinking { .. } => continue,
                 TurnEvent::ToolCall { name, args } => {
-                    // Flush any accumulated text before showing tool info.
-                    if !current_text.is_empty() {
-                        let _ = bridge_agent_tx.send(current_text.clone()).await;
-                        current_text.clear();
-                    }
                     let args_str =
                         serde_json::to_string_pretty(&args).unwrap_or_else(|_| args.to_string());
-                    let _ = bridge_agent_tx
-                        .send(format!("[tool: {name}]\n{args_str}"))
-                        .await;
+                    format!("[tool:{name}]\n{args_str}")
                 }
                 TurnEvent::ToolResult { name, output } => {
-                    let display = if output.len() > 500 {
-                        format!("{}...", &output[..500])
+                    let display = if let Some((idx, _)) = output.char_indices().nth(500) {
+                        format!("{}...", &output[..idx])
                     } else {
                         output
                     };
-                    let _ = bridge_agent_tx
-                        .send(format!("[result: {name}]\n{display}"))
-                        .await;
+                    format!("[result:{name}]\n{display}")
                 }
+            };
+            if bridge_agent_tx.send(msg).await.is_err() {
+                break;
             }
-        }
-        // Channel closed — flush any remaining text.
-        if !current_text.is_empty() {
-            let _ = bridge_agent_tx.send(current_text).await;
         }
     });
 
