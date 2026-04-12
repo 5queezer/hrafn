@@ -74,36 +74,95 @@ fn pause_after_no_command_help() {
 /// Launch the interactive TUI when `hrafn` is invoked without arguments.
 #[cfg(feature = "tui")]
 async fn run_interactive_tui() -> Result<()> {
-    use hrafn::tui::{CANCEL_SENTINEL, spawn_tui};
+    use agent::TurnEvent;
+    use hrafn::tui::spawn_tui;
     use tokio::sync::mpsc;
 
     if !std::io::stdout().is_terminal() {
         return print_no_command_help();
     }
 
-    let (user_tx, mut user_rx) = mpsc::channel::<String>(32);
-    let (agent_tx, agent_rx) = mpsc::channel::<String>(32);
+    // Load config (same path as Commands::Agent).
+    let mut cfg = Box::pin(config::Config::load_or_init()).await?;
+    cfg.apply_env_overrides();
+    observability::runtime_trace::init_from_config(&cfg.observability, &cfg.workspace_dir);
+
+    // String channels between TUI display and this task.
+    let (user_tx, user_rx) = mpsc::channel::<String>(32);
+    let (agent_tx, agent_rx) = mpsc::channel::<String>(256);
+
+    // TurnEvent channel from agent -> bridge task.
+    let (turn_event_tx, mut turn_event_rx) = mpsc::channel::<TurnEvent>(256);
 
     let tui_handle = spawn_tui(user_tx, agent_rx);
 
-    // Temporary echo-back loop until the real agent is wired (PR 3).
-    loop {
-        match user_rx.recv().await {
-            Some(msg) if msg == CANCEL_SENTINEL => {}
-            Some(msg) => {
-                let reply = format!("[echo] {msg}");
-                if agent_tx.send(reply).await.is_err() {
-                    break;
+    // Bridge: convert TurnEvents into display strings for the TUI.
+    let bridge_agent_tx = agent_tx.clone();
+    let bridge_handle = tokio::spawn(async move {
+        let mut current_text = String::new();
+        while let Some(event) = turn_event_rx.recv().await {
+            match event {
+                TurnEvent::Chunk { delta } => {
+                    if delta.is_empty() {
+                        // Empty chunk = end-of-turn marker; flush accumulated text.
+                        if !current_text.is_empty() {
+                            let _ = bridge_agent_tx.send(current_text.clone()).await;
+                            current_text.clear();
+                        }
+                    } else {
+                        current_text.push_str(&delta);
+                    }
+                }
+                TurnEvent::Thinking { .. } => {
+                    // Skip thinking tokens for now.
+                }
+                TurnEvent::ToolCall { name, args } => {
+                    // Flush any accumulated text before showing tool info.
+                    if !current_text.is_empty() {
+                        let _ = bridge_agent_tx.send(current_text.clone()).await;
+                        current_text.clear();
+                    }
+                    let args_str =
+                        serde_json::to_string_pretty(&args).unwrap_or_else(|_| args.to_string());
+                    let _ = bridge_agent_tx
+                        .send(format!("[tool: {name}]\n{args_str}"))
+                        .await;
+                }
+                TurnEvent::ToolResult { name, output } => {
+                    let display = if output.len() > 500 {
+                        format!("{}...", &output[..500])
+                    } else {
+                        output
+                    };
+                    let _ = bridge_agent_tx
+                        .send(format!("[result: {name}]\n{display}"))
+                        .await;
                 }
             }
-            None => break,
         }
+        // Channel closed — flush any remaining text.
+        if !current_text.is_empty() {
+            let _ = bridge_agent_tx.send(current_text).await;
+        }
+    });
+
+    // Run the agent in TUI mode (blocks until user_rx closes).
+    let agent_result = Box::pin(agent::run_tui(cfg, user_rx, turn_event_tx)).await;
+
+    if let Err(ref e) = agent_result {
+        // Best-effort: show the error in the TUI before it closes.
+        let _ = agent_tx.send(format!("[agent error: {e}]")).await;
     }
+
+    // Drop the bridge sender so the bridge task finishes.
+    drop(agent_tx);
+    let _ = bridge_handle.await;
 
     tui_handle
         .await
         .map_err(|e| anyhow::anyhow!("TUI task panicked: {e}"))?;
-    Ok(())
+
+    agent_result
 }
 
 mod agent;
@@ -891,7 +950,7 @@ async fn main() -> Result<()> {
 
     if std::env::args_os().len() <= 1 {
         #[cfg(feature = "tui")]
-        return run_interactive_tui().await;
+        return Box::pin(run_interactive_tui()).await;
         #[cfg(not(feature = "tui"))]
         return print_no_command_help();
     }
