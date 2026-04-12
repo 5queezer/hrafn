@@ -198,21 +198,29 @@ impl ToolSearchStrategy for BM25Strategy {
 // ── DeferredMcpToolStub ──────────────────────────────────────────────────
 
 /// Shorten a description to its first sentence (up to ". "), capped at 120
-/// chars. Falls back to the full text truncated at 120 chars with "…".
-/// Truncation is always on a UTF-8 character boundary.
+/// characters. Falls back to the full text truncated at 120 characters with
+/// "…". Whitespace (newlines, tabs, runs of spaces) is collapsed to single
+/// spaces before truncation. Truncation is always on a character boundary.
 fn shorten(text: &str) -> String {
-    let raw = if let Some(pos) = text.find(". ") {
-        &text[..=pos]
+    // Normalize: collapse all whitespace runs to a single space and trim.
+    let normalized: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    let raw: &str = if let Some(pos) = normalized.find(". ") {
+        &normalized[..=pos]
     } else {
-        text
+        &normalized
     };
-    if raw.len() <= 120 {
+
+    if raw.chars().count() <= 120 {
         raw.to_string()
     } else {
-        let mut end = 119;
-        while end > 0 && !raw.is_char_boundary(end) {
-            end -= 1;
-        }
+        // char_indices().nth(119) yields the byte offset of the 120th character,
+        // which is always a valid UTF-8 boundary.
+        let end = raw
+            .char_indices()
+            .nth(119)
+            .map(|(i, _)| i)
+            .unwrap_or(raw.len());
         format!("{}…", &raw[..end])
     }
 }
@@ -557,6 +565,40 @@ mod tests {
     fn stub_uses_description_from_def() {
         let stub = make_stub("fs__read", "Read a file");
         assert_eq!(stub.description, "Read a file");
+    }
+
+    #[test]
+    fn shorten_normalizes_whitespace_and_truncates_on_char_boundary() {
+        // Embedded newline: sentence detection works after normalization.
+        let stub = make_stub("t__a", "First sentence.\nSecond sentence follows.");
+        assert_eq!(stub.stub_description, "First sentence.");
+
+        // Leading/trailing whitespace and tab are trimmed.
+        let stub = make_stub("t__b", "  \t  Clean description.  \n ");
+        assert_eq!(stub.stub_description, "Clean description.");
+
+        // 125 emoji (4 bytes each) = 125 characters > 120 → truncated.
+        // char_indices().nth(119) slices before the 120th char, so 119 chars
+        // remain before the ellipsis.
+        let desc: String = "🔥".repeat(125);
+        let stub = make_stub("t__c", &desc);
+        assert!(stub.stub_description.ends_with('…'));
+        let before = stub.stub_description.trim_end_matches('…');
+        assert_eq!(before.chars().count(), 119);
+        assert!(std::str::from_utf8(stub.stub_description.as_bytes()).is_ok());
+
+        // 122 accented chars (é = 2 bytes each) = 122 chars > 120 → truncated.
+        let desc: String = "é".repeat(122);
+        let stub = make_stub("t__d", &desc);
+        assert!(stub.stub_description.ends_with('…'));
+        let before = stub.stub_description.trim_end_matches('…');
+        assert_eq!(before.chars().count(), 119);
+
+        // Exactly 120 chars → passes through unchanged (no ellipsis).
+        let desc: String = "é".repeat(120);
+        let stub = make_stub("t__e", &desc);
+        assert!(!stub.stub_description.ends_with('…'));
+        assert_eq!(stub.stub_description.chars().count(), 120);
     }
 
     #[test]

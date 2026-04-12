@@ -51,22 +51,30 @@ pub trait Tool: Send + Sync {
     /// Short description for tiered context injection.
     /// Used in system-prompt stubs where the full description would waste tokens.
     /// Default: first sentence of `description()` (up to the first ". "),
-    /// capped at 120 chars. Falls back to the full description truncated at
-    /// 120 chars with "…". Truncation is always on a UTF-8 character boundary.
+    /// capped at 120 characters. Falls back to the full description truncated at
+    /// 120 characters with "…". Whitespace (newlines, tabs, runs of spaces) is
+    /// collapsed to single spaces. Truncation is always on a character boundary.
     fn stub_description(&self) -> String {
         let d = self.description();
-        let raw = if let Some(pos) = d.find(". ") {
-            &d[..=pos]
+        // Normalize: collapse all whitespace runs to a single space and trim.
+        let normalized: String = d.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        let raw: &str = if let Some(pos) = normalized.find(". ") {
+            &normalized[..=pos]
         } else {
-            d
+            &normalized
         };
-        if raw.len() <= 120 {
+
+        if raw.chars().count() <= 120 {
             raw.to_string()
         } else {
-            let mut end = 119;
-            while end > 0 && !raw.is_char_boundary(end) {
-                end -= 1;
-            }
+            // char_indices().nth(119) yields the byte offset of the 120th character,
+            // which is always a valid UTF-8 boundary.
+            let end = raw
+                .char_indices()
+                .nth(119)
+                .map(|(i, _)| i)
+                .unwrap_or(raw.len());
             format!("{}…", &raw[..end])
         }
     }
@@ -289,9 +297,9 @@ mod tests {
 
     #[test]
     fn stub_description_non_ascii_truncation_does_not_panic() {
-        // Description is all multi-byte characters (3 bytes each in UTF-8).
-        // Any byte-level slice at position 119 would land mid-character → panic
-        // without the char-boundary fix.
+        // 122 euro signs = 122 characters (> 120 limit), 3 bytes each in UTF-8.
+        // A byte-based slice at position 119 would land mid-character → panic.
+        // char_indices().nth(119) must yield a valid character boundary.
         struct UnicodeTool;
         #[async_trait]
         impl Tool for UnicodeTool {
@@ -299,8 +307,8 @@ mod tests {
                 "t"
             }
             fn description(&self) -> &str {
-                // "€" is 3 bytes; 45 repetitions = 135 bytes, > 120
-                "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+                // 122 × "€" = 122 chars, 366 bytes
+                "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
             }
             fn parameters_schema(&self) -> serde_json::Value {
                 serde_json::json!({})
@@ -313,9 +321,13 @@ mod tests {
                 })
             }
         }
-        let stub = UnicodeTool.stub_description();
-        // Must not panic, must end with ellipsis, must be valid UTF-8.
-        assert!(stub.ends_with('…'));
-        assert!(std::str::from_utf8(stub.as_bytes()).is_ok());
+        let result = UnicodeTool.stub_description();
+        // Must truncate (122 chars > 120), end with ellipsis, be valid UTF-8.
+        // char_indices().nth(119) slices before the 120th char → 119 chars
+        // remain before the ellipsis.
+        assert!(result.ends_with('…'));
+        assert!(std::str::from_utf8(result.as_bytes()).is_ok());
+        let before_ellipsis = result.trim_end_matches('…');
+        assert_eq!(before_ellipsis.chars().count(), 119);
     }
 }
