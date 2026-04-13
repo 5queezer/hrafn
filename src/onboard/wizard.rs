@@ -445,6 +445,7 @@ fn memory_config_defaults_for_backend(backend: &str) -> MemoryConfig {
         conflict_threshold: 0.85,
         audit_enabled: false,
         audit_retention_days: 30,
+        access_tracking_enabled: false,
         policy: crate::config::MemoryPolicyConfig::default(),
         sqlite_open_timeout_secs: None,
         qdrant: crate::config::QdrantConfig::default(),

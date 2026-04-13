@@ -27,7 +27,6 @@ pub mod vector;
 #[cfg(test)]
 mod battle_tests;
 
-#[allow(unused_imports)]
 pub use audit::AuditedMemory;
 #[allow(unused_imports)]
 pub use backend::{
@@ -56,33 +55,59 @@ use anyhow::Context;
 use std::path::Path;
 use std::sync::Arc;
 
+/// Conditionally wrap a concrete memory backend with audit logging.
+fn maybe_wrap_audit<M: Memory + 'static>(
+    backend: M,
+    audit_enabled: bool,
+    access_tracking: bool,
+    workspace_dir: &Path,
+) -> anyhow::Result<Box<dyn Memory>> {
+    if audit_enabled {
+        Ok(Box::new(AuditedMemory::new(
+            backend,
+            workspace_dir,
+            access_tracking,
+        )?))
+    } else {
+        Ok(Box::new(backend))
+    }
+}
+
 fn create_memory_with_builders<F>(
     backend_name: &str,
     workspace_dir: &Path,
     mut sqlite_builder: F,
     unknown_context: &str,
+    audit_enabled: bool,
+    access_tracking: bool,
 ) -> anyhow::Result<Box<dyn Memory>>
 where
     F: FnMut() -> anyhow::Result<SqliteMemory>,
 {
     match classify_memory_backend(backend_name) {
-        MemoryBackendKind::Sqlite => Ok(Box::new(sqlite_builder()?)),
+        MemoryBackendKind::Sqlite => {
+            let mem = sqlite_builder()?;
+            maybe_wrap_audit(mem, audit_enabled, access_tracking, workspace_dir)
+        }
         MemoryBackendKind::Lucid => {
             let local = sqlite_builder()?;
-            Ok(Box::new(LucidMemory::new(workspace_dir, local)))
+            let lucid = LucidMemory::new(workspace_dir, local);
+            maybe_wrap_audit(lucid, audit_enabled, access_tracking, workspace_dir)
         }
         MemoryBackendKind::Muninndb | MemoryBackendKind::Qdrant | MemoryBackendKind::Markdown => {
             // Offline/lightweight fallback — data stored here is separate from
             // the actual backend (MuninnDB/Qdrant) and won't be visible there.
             tracing::debug!("Using markdown fallback for '{backend_name}' in lightweight context");
-            Ok(Box::new(MarkdownMemory::new(workspace_dir)))
+            let mem = MarkdownMemory::new(workspace_dir);
+            maybe_wrap_audit(mem, audit_enabled, access_tracking, workspace_dir)
         }
         MemoryBackendKind::None => Ok(Box::new(NoneMemory::new())),
         MemoryBackendKind::Unknown => {
             tracing::warn!(
                 "Unknown memory backend '{backend_name}'{unknown_context}, falling back to markdown"
             );
-            Ok(Box::new(MarkdownMemory::new(workspace_dir)))
+            let mem = MarkdownMemory::new(workspace_dir);
+            maybe_wrap_audit(mem, audit_enabled, access_tracking, workspace_dir)
         }
     }
 }
@@ -353,11 +378,12 @@ pub fn create_memory_with_storage_and_routes(
                 url,
                 vault
             );
-            return Ok(Box::new(MuninndbMemory::new(
-                &url,
-                &vault,
-                muninndb_api_key,
-            )));
+            return maybe_wrap_audit(
+                MuninndbMemory::new(&url, &vault, muninndb_api_key),
+                config.audit_enabled,
+                config.access_tracking_enabled,
+                workspace_dir,
+            );
         }
         #[cfg(not(feature = "memory-muninndb"))]
         {
@@ -365,11 +391,13 @@ pub fn create_memory_with_storage_and_routes(
                 "MuninnDB backend is configured but this build was compiled without \
                  the `memory-muninndb` feature; falling back to SQLite."
             );
-            return Ok(Box::new(build_sqlite_memory(
-                config,
+            let mem = build_sqlite_memory(config, workspace_dir, &resolved_embedding)?;
+            return maybe_wrap_audit(
+                mem,
+                config.audit_enabled,
+                config.access_tracking_enabled,
                 workspace_dir,
-                &resolved_embedding,
-            )?));
+            );
         }
     }
 
@@ -406,12 +434,12 @@ pub fn create_memory_with_storage_and_routes(
             url,
             collection
         );
-        return Ok(Box::new(QdrantMemory::new_lazy(
-            &url,
-            &collection,
-            qdrant_api_key,
-            embedder,
-        )));
+        return maybe_wrap_audit(
+            QdrantMemory::new_lazy(&url, &collection, qdrant_api_key, embedder),
+            config.audit_enabled,
+            config.access_tracking_enabled,
+            workspace_dir,
+        );
     }
 
     create_memory_with_builders(
@@ -419,6 +447,8 @@ pub fn create_memory_with_storage_and_routes(
         workspace_dir,
         || build_sqlite_memory(config, workspace_dir, &resolved_embedding),
         "",
+        config.audit_enabled,
+        config.access_tracking_enabled,
     )
 }
 
@@ -437,6 +467,8 @@ pub fn create_memory_for_migration(
         workspace_dir,
         || SqliteMemory::new(workspace_dir),
         " during migration",
+        false,
+        false,
     )
 }
 
