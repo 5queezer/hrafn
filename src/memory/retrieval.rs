@@ -65,13 +65,17 @@ impl RetrievalPipeline {
         limit: usize,
         session_id: Option<&str>,
         namespace: Option<&str>,
+        since: Option<&str>,
+        until: Option<&str>,
     ) -> String {
         format!(
-            "{}:{}:{}:{}",
+            "{}:{}:{}:{}:{}:{}",
             query,
             limit,
             session_id.unwrap_or(""),
-            namespace.unwrap_or("")
+            namespace.unwrap_or(""),
+            since.unwrap_or(""),
+            until.unwrap_or("")
         )
     }
 
@@ -120,7 +124,7 @@ impl RetrievalPipeline {
         since: Option<&str>,
         until: Option<&str>,
     ) -> anyhow::Result<Vec<MemoryEntry>> {
-        let ck = Self::cache_key(query, limit, session_id, namespace);
+        let ck = Self::cache_key(query, limit, session_id, namespace, since, until);
 
         for stage in &self.config.stages {
             match stage.as_str() {
@@ -206,7 +210,7 @@ mod tests {
         let pipeline = RetrievalPipeline::new(memory, RetrievalConfig::default());
 
         // Force a cache entry
-        let ck = RetrievalPipeline::cache_key("test", 10, None, None);
+        let ck = RetrievalPipeline::cache_key("test", 10, None, None, None, None);
         pipeline.store_in_cache(ck, vec![]);
 
         assert_eq!(pipeline.cache_size(), 1);
@@ -216,12 +220,31 @@ mod tests {
 
     #[test]
     fn cache_key_includes_all_params() {
-        let k1 = RetrievalPipeline::cache_key("hello", 10, Some("sess-a"), Some("ns1"));
-        let k2 = RetrievalPipeline::cache_key("hello", 10, Some("sess-b"), Some("ns1"));
-        let k3 = RetrievalPipeline::cache_key("hello", 10, Some("sess-a"), Some("ns2"));
+        let k1 = RetrievalPipeline::cache_key("hello", 10, Some("sess-a"), Some("ns1"), None, None);
+        let k2 = RetrievalPipeline::cache_key("hello", 10, Some("sess-b"), Some("ns1"), None, None);
+        let k3 = RetrievalPipeline::cache_key("hello", 10, Some("sess-a"), Some("ns2"), None, None);
 
         assert_ne!(k1, k2);
         assert_ne!(k1, k3);
+    }
+
+    #[test]
+    fn cache_key_includes_time_params() {
+        let k1 = RetrievalPipeline::cache_key("q", 10, None, None, None, None);
+        let k2 = RetrievalPipeline::cache_key("q", 10, None, None, Some("2026-01-01"), None);
+        let k3 = RetrievalPipeline::cache_key("q", 10, None, None, None, Some("2026-12-31"));
+        let k4 = RetrievalPipeline::cache_key(
+            "q",
+            10,
+            None,
+            None,
+            Some("2026-01-01"),
+            Some("2026-12-31"),
+        );
+
+        assert_ne!(k1, k2);
+        assert_ne!(k1, k3);
+        assert_ne!(k2, k4);
     }
 
     #[tokio::test]
@@ -241,7 +264,7 @@ mod tests {
         assert!(results.is_empty());
 
         // Manually insert a cache entry
-        let ck = RetrievalPipeline::cache_key("cached_query", 5, None, None);
+        let ck = RetrievalPipeline::cache_key("cached_query", 5, None, None, None, None);
         let fake_entry = MemoryEntry {
             id: "1".into(),
             key: "k".into(),
