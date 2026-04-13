@@ -49,19 +49,32 @@ Record timestamps whenever a memory entry is stored or recalled.
 This produces an "access spike train" per entry: a time-series of
 access events that enables temporal association scoring.
 
-**Scope:** New `memory_access_log` table in the SQLite backend,
-populated by `store()` and `recall()` implementations.
+**Scope:** New `memory_access_log` table in the audit database
+(`audit.db`), populated via the existing `AuditedMemory<M>`
+decorator (`src/memory/audit.rs`). This extends the audit
+infrastructure rather than adding a parallel tracking mechanism
+— the existing `memory_audit` table already tracks operation-level
+events (Store/Recall) but does not record which specific memory
+entries were returned by each recall, which is what Phase 2 needs
+for spike train construction.
 
 ```sql
-CREATE TABLE memory_access_log (
+CREATE TABLE IF NOT EXISTS memory_access_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
     memory_id   TEXT NOT NULL,
-    accessed_at TEXT NOT NULL,  -- RFC 3339
-    access_type TEXT NOT NULL,  -- 'store' | 'recall'
-    FOREIGN KEY (memory_id)
-        REFERENCES memories(id) ON DELETE CASCADE
+    memory_key  TEXT NOT NULL,
+    query       TEXT NOT NULL,
+    score       REAL,
+    namespace   TEXT,
+    session_id  TEXT,
+    accessed_at TEXT NOT NULL   -- RFC 3339
 );
-CREATE INDEX idx_access_log_memory
+CREATE INDEX IF NOT EXISTS idx_access_log_memory_id
     ON memory_access_log(memory_id);
+CREATE INDEX IF NOT EXISTS idx_access_log_accessed_at
+    ON memory_access_log(accessed_at);
+CREATE INDEX IF NOT EXISTS idx_access_log_memory_id_at
+    ON memory_access_log(memory_id, accessed_at);
 ```
 
 **Prerequisite fix:** `RetrievalPipeline::cache_key()` currently
@@ -117,9 +130,9 @@ pub fn hybrid_merge(
 ) -> Vec<ScoredResult>
 ```
 
-All existing call sites (in `sqlite.rs`, `muninndb.rs`, and
-`backend.rs`) must be updated. When `temporal_weight = 0.0`,
-callers pass an empty slice for `temporal_results`.
+The existing call site in `sqlite.rs` must be updated. When
+`temporal_weight = 0.0`, callers pass an empty slice for
+`temporal_results`.
 
 A configurable `temporal_candidate_cap` (default: 20) limits the
 candidate set size before temporal scoring runs, bounding the
@@ -135,23 +148,20 @@ final = w_vec * vector
 
 #### Weight defaults and migration
 
-The current defaults are `w_vec = 0.5`, `w_kw = 0.3` (sum 0.8).
-Phase 2 introduces `w_temp = 0.2` (new sum 1.0). This changes
-the effective scale of existing scores.
-
-**Migration path:** Existing `[memory]` configs that set custom
-`vector_weight` / `keyword_weight` values will have
-`temporal_weight` default to `0.0` (opt-in), so their scoring
-is unchanged. When a user explicitly enables `temporal_weight`,
-the `[memory]` settings handler renormalizes all three weights
-to sum to 1.0:
+The current defaults are `w_vec = 0.7`, `w_kw = 0.3` (sum 1.0).
+Phase 2 introduces `w_temp` (default `0.0`, opt-in). When a user
+explicitly sets `temporal_weight > 0.0`, all three weights are
+renormalized to sum to 1.0:
 
 ```text
 w_i' = w_i / (w_vec + w_kw + w_temp)
 ```
 
+For example, setting `temporal_weight = 0.2` with the current
+defaults yields `w_vec = 0.583`, `w_kw = 0.25`, `w_temp = 0.167`.
+
 If all weights are zero, the system falls back to hard-coded
-defaults (`w_vec = 0.625`, `w_kw = 0.375`). This guarantees no
+defaults (`w_vec = 0.7`, `w_kw = 0.3`). This guarantees no
 behavioral change for existing configurations.
 
 **Risk:** Medium. Changes retrieval scoring, but `w_temp`
