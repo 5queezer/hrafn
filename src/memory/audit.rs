@@ -119,7 +119,7 @@ impl<M: Memory> AuditedMemory<M> {
     fn log_recall_results(
         &self,
         query: &str,
-        namespace: Option<&str>,
+        request_namespace: Option<&str>,
         session_id: Option<&str>,
         results: &[MemoryEntry],
     ) {
@@ -131,6 +131,8 @@ impl<M: Memory> AuditedMemory<M> {
         // Batch-insert in a single transaction for performance.
         let _ = conn.execute_batch("BEGIN");
         for entry in results {
+            // Prefer the entry's own namespace; fall back to request-scoped namespace.
+            let namespace = request_namespace.unwrap_or(entry.namespace.as_str());
             let _ = conn.execute(
                 "INSERT INTO memory_access_log
                      (memory_id, memory_key, query, score, namespace, session_id, accessed_at)
@@ -241,6 +243,8 @@ impl<M: Memory> AuditedMemory<M> {
              JOIN memory_access_log b
                ON a.memory_id = ?1
               AND b.memory_id != ?1
+              AND a.namespace IS b.namespace
+              AND a.session_id IS b.session_id
               AND ABS(
                   julianday(b.accessed_at) - julianday(a.accessed_at)
               ) * 86400 <= ?2

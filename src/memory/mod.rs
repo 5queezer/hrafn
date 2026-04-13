@@ -101,7 +101,10 @@ where
             let mem = MarkdownMemory::new(workspace_dir);
             maybe_wrap_audit(mem, audit_enabled, access_tracking, workspace_dir)
         }
-        MemoryBackendKind::None => Ok(Box::new(NoneMemory::new())),
+        MemoryBackendKind::None => {
+            let mem = NoneMemory::new();
+            maybe_wrap_audit(mem, audit_enabled, access_tracking, workspace_dir)
+        }
         MemoryBackendKind::Unknown => {
             tracing::warn!(
                 "Unknown memory backend '{backend_name}'{unknown_context}, falling back to markdown"

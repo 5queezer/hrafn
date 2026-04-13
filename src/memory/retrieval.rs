@@ -59,7 +59,11 @@ impl RetrievalPipeline {
         }
     }
 
-    /// Build a cache key from query parameters.
+    /// Build a collision-safe cache key from query parameters.
+    ///
+    /// Uses length-prefixed encoding to prevent ambiguous splits
+    /// (e.g. `session_id="a:b"` vs `namespace="a:b"`) and explicit
+    /// `N` sentinels for `None` vs `Some("")`.
     fn cache_key(
         query: &str,
         limit: usize,
@@ -68,14 +72,22 @@ impl RetrievalPipeline {
         since: Option<&str>,
         until: Option<&str>,
     ) -> String {
+        fn enc(v: &str) -> String {
+            format!("{}:{v}", v.len())
+        }
+        fn enc_opt(v: Option<&str>) -> String {
+            match v {
+                Some(s) => format!("S{}:{s}", s.len()),
+                None => "N".to_string(),
+            }
+        }
         format!(
-            "{}:{}:{}:{}:{}:{}",
-            query,
-            limit,
-            session_id.unwrap_or(""),
-            namespace.unwrap_or(""),
-            since.unwrap_or(""),
-            until.unwrap_or("")
+            "q{}|l{limit}|sid{}|ns{}|since{}|until{}",
+            enc(query),
+            enc_opt(session_id),
+            enc_opt(namespace),
+            enc_opt(since),
+            enc_opt(until),
         )
     }
 

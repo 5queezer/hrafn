@@ -10043,6 +10043,11 @@ impl Config {
     /// Called after TOML deserialization and env-override application to catch
     /// obviously invalid values early instead of failing at arbitrary runtime points.
     pub fn validate(&self) -> Result<()> {
+        // Memory — access tracking requires audit
+        if self.memory.access_tracking_enabled && !self.memory.audit_enabled {
+            anyhow::bail!("memory.access_tracking_enabled requires memory.audit_enabled = true");
+        }
+
         // Tunnel — OpenVPN
         if self.tunnel.provider.trim() == "openvpn" {
             let openvpn = self.tunnel.openvpn.as_ref().ok_or_else(|| {
