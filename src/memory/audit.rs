@@ -131,8 +131,13 @@ impl<M: Memory> AuditedMemory<M> {
         // Batch-insert in a single transaction for performance.
         let _ = conn.execute_batch("BEGIN");
         for entry in results {
-            // Prefer the entry's own namespace; fall back to request-scoped namespace.
-            let namespace = request_namespace.unwrap_or(entry.namespace.as_str());
+            // Use the entry's own namespace (always populated, defaults to "default").
+            // Only fall back to request namespace if entry namespace is empty.
+            let namespace = if entry.namespace.is_empty() {
+                request_namespace.unwrap_or("default")
+            } else {
+                entry.namespace.as_str()
+            };
             let _ = conn.execute(
                 "INSERT INTO memory_access_log
                      (memory_id, memory_key, query, score, namespace, session_id, accessed_at)
