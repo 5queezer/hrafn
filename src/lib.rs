@@ -106,6 +106,7 @@ pub mod runtime;
 pub(crate) mod security;
 #[cfg(feature = "desktop")]
 pub(crate) mod service;
+pub mod session;
 #[cfg(feature = "desktop")]
 pub(crate) mod skills;
 #[cfg(feature = "desktop")]
