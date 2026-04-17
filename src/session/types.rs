@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::SessionId;
+use super::message::ChatMessage;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct MessageCounts {
@@ -23,7 +24,7 @@ pub struct SessionMeta {
     pub cwd: PathBuf,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    #[serde(with = "duration_ms")]
+    #[serde(with = "super::message::duration_ms_field")]
     pub duration: Duration,
     pub provider: Option<String>,
     pub model: Option<String>,
@@ -34,34 +35,13 @@ pub struct SessionMeta {
 pub struct StoredMessage {
     pub seq: u32,
     pub ts: DateTime<Utc>,
-    pub body: crate::tui::ChatMessage,
+    pub body: ChatMessage,
 }
 
 #[derive(Debug, Clone)]
 pub struct Session {
     pub meta: SessionMeta,
     pub messages: Vec<StoredMessage>,
-}
-
-/// Serde adaptor — store Duration as milliseconds.
-mod duration_ms {
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::time::Duration;
-
-    pub fn serialize<S: Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_u64(u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
-    }
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
-        let ms: u64 = Deserialize::deserialize(d)?;
-        Ok(Duration::from_millis(ms))
-    }
-}
-
-impl SessionId {
-    #[must_use]
-    pub fn short(&self) -> &str {
-        &self.as_str()[..10.min(self.as_str().len())]
-    }
 }
 
 impl Serialize for SessionId {

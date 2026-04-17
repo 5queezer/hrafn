@@ -34,6 +34,12 @@ impl SessionId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Short display form: the first 10 characters of the ID (date portion).
+    #[must_use]
+    pub fn short(&self) -> &str {
+        &self.as_str()[..10.min(self.as_str().len())]
+    }
 }
 
 impl std::fmt::Display for SessionId {
