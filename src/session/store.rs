@@ -134,6 +134,9 @@ impl SessionStore {
              VALUES (?1, COALESCE((SELECT MAX(seq) FROM messages WHERE session_id = ?1), 0) + 1, ?2, ?3, ?4)",
             params![id.as_str(), kind, payload, now_ms],
         )?;
+        // SQLite evaluates all RHS expressions against the pre-UPDATE row, so when
+        // counter_col == "msg_total" the duplicate assignments still bump the column
+        // by exactly 1 (last assignment wins — not a double-bump).
         let sql = format!(
             "UPDATE sessions SET {counter_col} = {counter_col} + 1, msg_total = msg_total + 1, updated_at = ?1 WHERE id = ?2"
         );
@@ -146,7 +149,8 @@ impl SessionStore {
         let mut stmt = self
             .conn
             .prepare("SELECT id FROM sessions ORDER BY updated_at DESC LIMIT ?1")?;
-        let ids = stmt.query_map(params![limit as i64], |r| r.get::<_, String>(0))?;
+        let limit_i64 = i64::try_from(limit).unwrap_or(i64::MAX);
+        let ids = stmt.query_map(params![limit_i64], |r| r.get::<_, String>(0))?;
         let mut out = Vec::new();
         for id in ids {
             let id = SessionId::parse(&id?).context("parse id from DB")?;
