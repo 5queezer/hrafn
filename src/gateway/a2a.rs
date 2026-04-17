@@ -1380,14 +1380,20 @@ pub async fn handle_tasks_get_rest(
 /// `POST /tasks/{id}:cancel` — v1.0 REST binding for CancelTask.
 /// The route captures the full `{id}:cancel` segment; the `:cancel` suffix
 /// is stripped at runtime because axum does not support `{param}:suffix` patterns.
+///
+/// Requests to `POST /tasks/{id}` without the `:cancel` suffix return 404 —
+/// only the suffixed form is a valid cancel route per the A2A spec.
 pub async fn handle_tasks_cancel_rest(
     State(state): State<AppState>,
     headers: HeaderMap,
     axum::extract::Path(raw): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     // A2A spec uses gRPC-style `/tasks/{id}:cancel` but axum captures
-    // the full segment including the `:cancel` suffix.
-    let task_id = raw.strip_suffix(":cancel").unwrap_or(&raw).to_string();
+    // the full segment including the `:cancel` suffix. Reject requests
+    // that lack the suffix so `POST /tasks/{id}` does not silently cancel.
+    let Some(task_id) = raw.strip_suffix(":cancel").map(str::to_owned) else {
+        return (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))).into_response();
+    };
     let (Some(_card), Some(task_store)) = (&state.a2a_agent_card, &state.a2a_task_store) else {
         return (
             StatusCode::NOT_FOUND,
@@ -2866,6 +2872,78 @@ mod tests {
         let body_bytes = axum::body::to_bytes(resp.into_body(), 65536).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         assert_eq!(body["result"]["status"]["state"], "TASK_STATE_CANCELED");
+    }
+
+    #[tokio::test]
+    async fn cancel_rest_accepts_suffixed_path() {
+        let state = a2a_test_state(None, false, &[]);
+        let task_store = state.a2a_task_store.as_ref().unwrap();
+        {
+            let mut tasks = task_store.tasks.write().await;
+            tasks.insert(
+                "abc123".into(),
+                Task {
+                    id: "abc123".into(),
+                    status: TaskStatus {
+                        state: A2aTaskState::Working,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: None,
+                    artifacts: None,
+                    history: None,
+                    metadata: None,
+                },
+            );
+        }
+        let resp = handle_tasks_cancel_rest(
+            State(state),
+            HeaderMap::new(),
+            axum::extract::Path("abc123:cancel".to_string()),
+        )
+        .await
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = response_json(resp).await;
+        assert_eq!(body["status"]["state"], "TASK_STATE_CANCELED");
+    }
+
+    #[tokio::test]
+    async fn cancel_rest_rejects_unsuffixed_path() {
+        let state = a2a_test_state(None, false, &[]);
+        let task_store = state.a2a_task_store.as_ref().unwrap();
+        {
+            let mut tasks = task_store.tasks.write().await;
+            tasks.insert(
+                "abc123".into(),
+                Task {
+                    id: "abc123".into(),
+                    status: TaskStatus {
+                        state: A2aTaskState::Working,
+                        message: None,
+                        timestamp: None,
+                    },
+                    context_id: None,
+                    artifacts: None,
+                    history: None,
+                    metadata: None,
+                },
+            );
+        }
+        // POST /tasks/abc123 (no :cancel suffix) must NOT cancel the task.
+        let resp = handle_tasks_cancel_rest(
+            State(state.clone()),
+            HeaderMap::new(),
+            axum::extract::Path("abc123".to_string()),
+        )
+        .await
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        // Task must still be Working.
+        let tasks = task_store.tasks.read().await;
+        let t = tasks.get("abc123").unwrap();
+        assert_eq!(t.status.state, A2aTaskState::Working);
     }
 
     #[tokio::test]
