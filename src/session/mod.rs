@@ -5,8 +5,10 @@
 
 pub mod id;
 pub mod message;
+pub mod store;
 pub mod types;
 
 pub use id::SessionId;
 pub use message::{ChatMessage, ToolStatus};
+pub use store::SessionStore;
 pub use types::{MessageCounts, Session, SessionMeta, StoredMessage};
