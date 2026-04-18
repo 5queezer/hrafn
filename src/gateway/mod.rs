@@ -9,6 +9,8 @@
 
 #[cfg(feature = "tool-a2a")]
 pub mod a2a;
+#[cfg(feature = "tool-a2a")]
+pub mod a2a_push;
 pub mod acp;
 pub mod api;
 pub mod api_pairing;
@@ -389,6 +391,9 @@ pub struct AppState {
     /// In-memory A2A task store (populated when `a2a.enabled`)
     #[cfg(feature = "tool-a2a")]
     pub a2a_task_store: Option<Arc<a2a::TaskStore>>,
+    /// In-memory A2A push notification config store (populated when `a2a.enabled`)
+    #[cfg(feature = "tool-a2a")]
+    pub a2a_push_store: Option<Arc<a2a_push::PushNotificationStore>>,
     /// ACP agent registry
     pub acp_agent_registry: crate::gateway::acp::AgentRegistry,
     /// ACP run store
@@ -899,7 +904,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
 
     // ── A2A (Agent-to-Agent) protocol ────────────────────────
     #[cfg(feature = "tool-a2a")]
-    let (a2a_agent_card, a2a_task_store) = if config.a2a.enabled {
+    let (a2a_agent_card, a2a_task_store, a2a_push_store) = if config.a2a.enabled {
         // Security: warn when no authentication is configured for A2A
         let has_bearer = config
             .a2a
@@ -926,6 +931,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         let card = a2a::generate_agent_card(&config);
         tracing::info!("A2A protocol enabled — agent card generated");
         let task_store = Arc::new(a2a::TaskStore::new());
+        let push_store = Arc::new(a2a_push::PushNotificationStore::new());
 
         // Start background eviction for terminal tasks
         a2a::spawn_eviction_task(
@@ -935,9 +941,9 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             shutdown_tx.subscribe(),
         );
 
-        (Some(Arc::new(card)), Some(task_store))
+        (Some(Arc::new(card)), Some(task_store), Some(push_store))
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     // ── ACP (Agent Communication Protocol) ──────────────────────
@@ -1009,6 +1015,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         a2a_agent_card,
         #[cfg(feature = "tool-a2a")]
         a2a_task_store,
+        #[cfg(feature = "tool-a2a")]
+        a2a_push_store,
         acp_agent_registry,
         acp_run_store,
     };
@@ -1035,6 +1043,15 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
                 .route(
                     "/tasks/by-context/{context_id}",
                     get(a2a::handle_tasks_by_context_rest),
+                )
+                // Push notification config CRUD.
+                .route(
+                    "/tasks/{task_id}/pushNotificationConfigs",
+                    post(a2a_push::handle_create_rest).get(a2a_push::handle_list_rest),
+                )
+                .route(
+                    "/tasks/{task_id}/pushNotificationConfigs/{id}",
+                    get(a2a_push::handle_get_rest).delete(a2a_push::handle_delete_rest),
                 )
                 .route("/a2a", post(a2a::handle_a2a_rpc))
                 .layer(DefaultBodyLimit::max(config.a2a.body_limit_bytes)),
@@ -2552,6 +2569,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -2629,6 +2648,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3033,6 +3054,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3125,6 +3148,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3223,6 +3248,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3294,6 +3321,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3370,6 +3399,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3454,6 +3485,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
@@ -3532,6 +3565,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
         };
