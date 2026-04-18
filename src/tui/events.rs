@@ -20,7 +20,8 @@ pub(crate) fn handle_turn_event(app: &mut App, event: TurnEvent) {
                 args: args_str,
                 status: ToolStatus::Running(Instant::now()),
             };
-            app.messages.push(msg);
+            app.messages.push(msg.clone());
+            app.persist(&msg);
             if app.auto_scroll {
                 app.scroll_offset = u16::MAX;
             }
@@ -29,7 +30,8 @@ pub(crate) fn handle_turn_event(app: &mut App, event: TurnEvent) {
             update_tool_status(&mut app.messages, &name);
             app.active_tools.retain(|t| t.name != name);
             let msg = ChatMessage::ToolResult { name, output };
-            app.messages.push(msg);
+            app.messages.push(msg.clone());
+            app.persist(&msg);
             if app.auto_scroll {
                 app.scroll_offset = u16::MAX;
             }

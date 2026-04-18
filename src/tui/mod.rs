@@ -6,6 +6,7 @@ mod sidebar;
 pub mod theme;
 
 use std::io;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crossterm::{
@@ -108,6 +109,10 @@ pub struct App {
     // Spinner (agent thinking indicator)
     pub(crate) spinner: Option<SpinnerState>,
 
+    // Session persistence
+    pub(crate) session: Option<SessionHandle>,
+    pub(crate) persist_retry_count: u8,
+
     // Control
     pub(crate) should_quit: bool,
     pub(crate) tick: usize,
@@ -145,8 +150,59 @@ impl App {
             ],
             palette_selected: 0,
             spinner: None,
+            session: None,
+            persist_retry_count: 0,
             should_quit: false,
             tick: 0,
+        }
+    }
+
+    /// Start a new App bound to an existing session (messages start empty).
+    pub(crate) fn with_session(session: SessionHandle) -> Self {
+        let mut app = Self::new();
+        app.session = Some(session);
+        app
+    }
+
+    /// Start an App with a session and pre-populated messages (resume flow).
+    #[allow(dead_code)] // Task 13 will call this from boot dispatch
+    pub(crate) fn with_resumed(session: SessionHandle, messages: Vec<ChatMessage>) -> Self {
+        let mut app = Self::with_session(session);
+        app.messages = messages;
+        app
+    }
+
+    /// Persist a message to the attached session, if any.
+    ///
+    /// - On first failure, surfaces a `[persistence error: ...]` system message
+    ///   in the UI (via `push_system_nopersist` to avoid recursion).
+    /// - On subsequent failures, logs via `tracing::warn!` and suppresses
+    ///   further UI noise until a successful append resets the counter.
+    pub(crate) fn persist(&mut self, msg: &ChatMessage) {
+        let Some(handle) = self.session.as_ref() else {
+            return;
+        };
+        match handle.append(msg) {
+            Ok(()) => self.persist_retry_count = 0,
+            Err(e) if self.persist_retry_count == 0 => {
+                self.persist_retry_count = 1;
+                self.push_system_nopersist(format!("[persistence error: {e}]"));
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "persistence error suppressed after repeated failure");
+                self.persist_retry_count = 2;
+            }
+        }
+    }
+
+    /// Push a system message without attempting to persist it.
+    ///
+    /// Used by `persist()` itself to avoid recursion when reporting a
+    /// persistence failure would try to re-persist the error message.
+    fn push_system_nopersist(&mut self, text: String) {
+        self.messages.push(ChatMessage::System { text });
+        if self.auto_scroll {
+            self.scroll_offset = u16::MAX;
         }
     }
 
@@ -253,19 +309,23 @@ impl App {
                 self.push_system("  Ctrl+B  - Toggle sidebar".into());
                 self.push_system("  Ctrl+P  - Toggle command palette".into());
             }
-            _ => match tx.try_send(text.clone()) {
-                Ok(()) => {
-                    self.messages.push(ChatMessage::User { text });
-                    if self.auto_scroll {
-                        self.scroll_offset = u16::MAX;
+            _ => {
+                let persist_text = text.clone();
+                match tx.try_send(text.clone()) {
+                    Ok(()) => {
+                        self.messages.push(ChatMessage::User { text });
+                        if self.auto_scroll {
+                            self.scroll_offset = u16::MAX;
+                        }
+                        self.spinner = Some(SpinnerState::new("pondering"));
+                        self.persist(&ChatMessage::User { text: persist_text });
                     }
-                    self.spinner = Some(SpinnerState::new("pondering"));
+                    Err(_) => {
+                        self.textarea.insert_str(&text);
+                        self.push_system("[send failed \u{2014} channel full]".into());
+                    }
                 }
-                Err(_) => {
-                    self.textarea.insert_str(&text);
-                    self.push_system("[send failed \u{2014} channel full]".into());
-                }
-            },
+            }
         }
     }
 
@@ -277,10 +337,12 @@ impl App {
     }
 
     fn push_assistant(&mut self, text: String) {
+        let persist_text = text.clone();
         self.messages.push(ChatMessage::Assistant { text });
         if self.auto_scroll {
             self.scroll_offset = u16::MAX;
         }
+        self.persist(&ChatMessage::Assistant { text: persist_text });
     }
 }
 
@@ -288,14 +350,16 @@ impl App {
 ///
 /// - `tx`: channel for sending user input (and cancel signals) to the agent.
 /// - `rx`: channel for receiving `TurnEvent`s from the agent.
+/// - `session`: optional `SessionHandle` to persist messages to.
 ///
 /// Returns a `JoinHandle` that resolves when the TUI exits.
 pub fn spawn_tui(
     tx: mpsc::Sender<String>,
     mut rx: mpsc::Receiver<crate::agent::TurnEvent>,
+    session: Option<SessionHandle>,
 ) -> JoinHandle<()> {
     tokio::task::spawn_blocking(move || {
-        if let Err(e) = run_tui(tx, &mut rx) {
+        if let Err(e) = run_tui(tx, &mut rx, session) {
             eprintln!("TUI error: {e}");
         }
     })
@@ -314,6 +378,7 @@ impl Drop for TerminalGuard {
 fn run_tui(
     tx: mpsc::Sender<String>,
     rx: &mut mpsc::Receiver<crate::agent::TurnEvent>,
+    session: Option<SessionHandle>,
 ) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let _guard = TerminalGuard; // ensures raw mode + alt screen are restored even on panic
@@ -322,7 +387,10 @@ fn run_tui(
     let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new();
+    let mut app = match session {
+        Some(h) => App::with_session(h),
+        None => App::new(),
+    };
 
     loop {
         terminal.draw(|f| app.draw(f))?;
@@ -452,5 +520,46 @@ fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> 
             app.textarea.input(key);
             false
         }
+    }
+}
+
+/// Thin wrapper around the `SessionStore` + current session ID.
+///
+/// Cheap to clone; multiple clones share the same `Arc`'d store. All methods
+/// forward to the inner store using the bound session ID.
+///
+/// Thread safety: `SessionStore` wraps a `rusqlite::Connection`, which is
+/// `Send` but not `Sync`. The TUI runs on a single `spawn_blocking` thread and
+/// all `append`/`set_title`/etc. calls happen there, so the `!Sync` property
+/// is not exercised — we do not share `&SessionStore` across threads.
+#[derive(Clone)]
+pub struct SessionHandle {
+    store: Arc<crate::session::SessionStore>,
+    id: crate::session::SessionId,
+}
+
+impl SessionHandle {
+    pub fn new(store: Arc<crate::session::SessionStore>, id: crate::session::SessionId) -> Self {
+        Self { store, id }
+    }
+
+    pub fn id(&self) -> &crate::session::SessionId {
+        &self.id
+    }
+
+    pub fn store(&self) -> &Arc<crate::session::SessionStore> {
+        &self.store
+    }
+
+    pub fn append(&self, msg: &ChatMessage) -> anyhow::Result<()> {
+        self.store.append(&self.id, msg)
+    }
+
+    pub fn set_title(&self, title: &str, explicit: bool) -> anyhow::Result<()> {
+        self.store.set_title(&self.id, title, explicit)
+    }
+
+    pub fn add_duration(&self, d: std::time::Duration) -> anyhow::Result<()> {
+        self.store.add_duration(&self.id, d)
     }
 }

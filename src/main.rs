@@ -108,7 +108,7 @@ async fn run_interactive_tui(boot: Option<SessionBoot>) -> Result<()> {
     let (user_tx, user_rx) = mpsc::channel::<String>(32);
     let (turn_event_tx, turn_event_rx) = mpsc::channel::<TurnEvent>(256);
 
-    let tui_handle = spawn_tui(user_tx, turn_event_rx);
+    let tui_handle = spawn_tui(user_tx, turn_event_rx, None);
 
     // Run the agent in TUI mode (blocks until user_rx closes).
     let agent_result = Box::pin(hrafn::agent::run_tui(cfg, user_rx, turn_event_tx.clone())).await;

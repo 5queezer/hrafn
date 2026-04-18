@@ -3,6 +3,7 @@
 //! See `docs/superpowers/specs/2026-04-18-tui-sessions-and-polish-design.md`.
 
 use std::path::Path;
+use std::sync::Mutex;
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -12,8 +13,15 @@ use super::{Session, SessionId, SessionMeta};
 const SCHEMA: &str = include_str!("schema.sql");
 const SCHEMA_VERSION: i64 = 1;
 
+/// SQLite-backed session store.
+///
+/// The inner `Connection` is wrapped in a `Mutex` so `Arc<SessionStore>` is
+/// `Send + Sync` — needed so `SessionHandle` (held by the TUI running on a
+/// `tokio::spawn_blocking` thread) can be sent across the thread boundary.
+/// In practice there's only one thread using the store at a time (the TUI
+/// worker), so contention on the mutex is negligible.
 pub struct SessionStore {
-    conn: Connection,
+    conn: Mutex<Connection>,
 }
 
 impl SessionStore {
@@ -37,7 +45,15 @@ impl SessionStore {
         if v != SCHEMA_VERSION {
             bail!("unknown schema version {v}; upgrade hrafn");
         }
-        Ok(Self { conn })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub fn create(
@@ -51,7 +67,7 @@ impl SessionStore {
         let now = chrono::Utc::now();
         let now_ms = now.timestamp_millis();
         let cwd_str = cwd.to_string_lossy().to_string();
-        self.conn
+        self.conn()
             .execute(
                 "INSERT INTO sessions (id, title, title_explicit, cwd, created_at, updated_at, provider, model)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7)",
@@ -82,7 +98,8 @@ impl SessionStore {
 
     pub fn load(&self, id: &SessionId) -> Result<Session> {
         let meta = self.load_meta(id)?;
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT seq, kind, payload, ts FROM messages WHERE session_id = ?1 ORDER BY seq ASC",
         )?;
         let rows = stmt.query_map(params![id.as_str()], |r| {
@@ -128,7 +145,8 @@ impl SessionStore {
             "tool_result" => "msg_tool_result",
             _ => "msg_total",
         };
-        let tx = self.conn.unchecked_transaction()?;
+        let conn = self.conn();
+        let tx = conn.unchecked_transaction()?;
         tx.execute(
             "INSERT INTO messages (session_id, seq, kind, payload, ts)
              VALUES (?1, COALESCE((SELECT MAX(seq) FROM messages WHERE session_id = ?1), 0) + 1, ?2, ?3, ?4)",
@@ -146,14 +164,19 @@ impl SessionStore {
     }
 
     pub fn list(&self, limit: usize) -> Result<Vec<SessionMeta>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM sessions ORDER BY updated_at DESC LIMIT ?1")?;
         let limit_i64 = i64::try_from(limit).unwrap_or(i64::MAX);
-        let ids = stmt.query_map(params![limit_i64], |r| r.get::<_, String>(0))?;
+        // Collect IDs under the lock, then release before calling `load_meta`
+        // (which re-acquires the lock for each row).
+        let ids: Vec<String> = {
+            let conn = self.conn();
+            let mut stmt =
+                conn.prepare("SELECT id FROM sessions ORDER BY updated_at DESC LIMIT ?1")?;
+            let rows = stmt.query_map(params![limit_i64], |r| r.get::<_, String>(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
         let mut out = Vec::new();
         for id in ids {
-            let id = SessionId::parse(&id?).context("parse id from DB")?;
+            let id = SessionId::parse(&id).context("parse id from DB")?;
             out.push(self.load_meta(&id)?);
         }
         Ok(out)
@@ -162,7 +185,7 @@ impl SessionStore {
     pub fn find_by_title_fuzzy(&self, needle: &str) -> Result<Option<SessionMeta>> {
         let like = format!("%{needle}%");
         let id: Option<String> = self
-            .conn
+            .conn()
             .query_row(
                 "SELECT id FROM sessions WHERE title LIKE ?1 COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1",
                 params![like],
@@ -178,7 +201,7 @@ impl SessionStore {
 
     pub fn most_recent(&self) -> Result<Option<SessionMeta>> {
         let id: Option<String> = self
-            .conn
+            .conn()
             .query_row(
                 "SELECT id FROM sessions ORDER BY updated_at DESC LIMIT 1",
                 [],
@@ -201,14 +224,14 @@ impl SessionStore {
         } else {
             "UPDATE sessions SET title = ?1, updated_at = ?2 WHERE id = ?3 AND title_explicit = 0"
         };
-        self.conn
+        self.conn()
             .execute(sql, params![title, now_ms, id.as_str()])?;
         Ok(())
     }
 
     pub fn add_duration(&self, id: &SessionId, d: std::time::Duration) -> Result<()> {
         let add_ms = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
-        self.conn.execute(
+        self.conn().execute(
             "UPDATE sessions SET duration_ms = duration_ms + ?1 WHERE id = ?2",
             params![add_ms, id.as_str()],
         )?;
@@ -216,13 +239,13 @@ impl SessionStore {
     }
 
     pub fn delete(&self, id: &SessionId) -> Result<()> {
-        self.conn
+        self.conn()
             .execute("DELETE FROM sessions WHERE id = ?1", params![id.as_str()])?;
         Ok(())
     }
 
     fn load_meta(&self, id: &SessionId) -> Result<SessionMeta> {
-        self.conn
+        self.conn()
             .query_row(
                 "SELECT id, title, title_explicit, cwd, created_at, updated_at, duration_ms, provider, model,
                         msg_total, msg_user, msg_assistant, msg_tool_call, msg_tool_result
