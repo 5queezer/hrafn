@@ -157,6 +157,7 @@ lru = { version = "0.16", optional = true }
 
 # Memory / persistence
 rusqlite = { version = "0.37", features = ["bundled"] }
+dirs = "5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 chrono-tz = { version = "0.10", optional = true }
 cron = { version = "0.15", optional = true }

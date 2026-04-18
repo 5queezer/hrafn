@@ -71,12 +71,28 @@ fn pause_after_no_command_help() {
     let _ = std::io::stdin().read_line(&mut line);
 }
 
+/// Which session the TUI should boot with when launched from a top-level
+/// session flag. Wired in Task 13; currently accepted as a parameter so the
+/// CLI surface is in place.
+#[cfg(feature = "tui")]
+#[derive(Debug, Clone)]
+enum SessionBoot {
+    /// Resume by ID (`None` = most recent).
+    Resume(Option<String>),
+    /// Fuzzy-match title; create with this title if zero matches.
+    ContinueOrCreate(String),
+}
+
 /// Launch the interactive TUI when `hrafn` is invoked without arguments.
 #[cfg(feature = "tui")]
-async fn run_interactive_tui() -> Result<()> {
+async fn run_interactive_tui(boot: Option<SessionBoot>) -> Result<()> {
     use hrafn::agent::TurnEvent;
     use hrafn::tui::spawn_tui;
     use tokio::sync::mpsc;
+
+    // TODO(plan Task 13): dispatch on `boot` to new/resume/continue-or-create.
+    // For now, retains pre-Task-13 behavior and ignores the parameter.
+    let _ = boot;
 
     if !std::io::stdout().is_terminal() {
         return print_no_command_help();
@@ -151,6 +167,9 @@ mod plugins;
 mod providers;
 mod runtime;
 mod security;
+mod session {
+    pub use hrafn::session::*;
+}
 mod service;
 mod skillforge;
 mod skills;
@@ -207,8 +226,42 @@ struct Cli {
     #[arg(long, global = true)]
     config_dir: Option<String>,
 
+    /// Resume a previous session by ID. With no value, resumes the most recent.
+    #[arg(
+        long,
+        value_name = "ID",
+        num_args = 0..=1,
+        default_missing_value = "",
+        conflicts_with_all = ["c", "list_sessions", "delete_session"]
+    )]
+    resume: Option<String>,
+
+    /// Continue a session with this title (fuzzy; most recent match wins) or create one.
+    #[arg(
+        short = 'c',
+        value_name = "TITLE",
+        conflicts_with_all = ["resume", "list_sessions", "delete_session"]
+    )]
+    c: Option<String>,
+
+    /// Print a table of all sessions to stdout and exit.
+    #[arg(long, conflicts_with_all = ["resume", "c", "delete_session"])]
+    list_sessions: bool,
+
+    /// Emit --list-sessions output as JSON.
+    #[arg(long, requires = "list_sessions")]
+    json: bool,
+
+    /// Delete a session by ID. Confirms on stdin unless --yes.
+    #[arg(long, value_name = "ID", conflicts_with_all = ["resume", "c", "list_sessions"])]
+    delete_session: Option<String>,
+
+    /// Skip confirmation prompts.
+    #[arg(long)]
+    yes: bool,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -902,7 +955,7 @@ async fn main() -> Result<()> {
 
     if std::env::args_os().len() <= 1 {
         #[cfg(feature = "tui")]
-        return Box::pin(run_interactive_tui()).await;
+        return Box::pin(run_interactive_tui(None)).await;
         #[cfg(not(feature = "tui"))]
         return print_no_command_help();
     }
@@ -917,16 +970,49 @@ async fn main() -> Result<()> {
         unsafe { std::env::set_var("HRAFN_CONFIG_DIR", config_dir) };
     }
 
+    // Session-management flags (no subcommand, no TUI).
+    if cli.list_sessions {
+        return commands::sessions::list(cli.json).await;
+    }
+    if let Some(id) = cli.delete_session.clone() {
+        return commands::sessions::delete(&id, cli.yes).await;
+    }
+
+    #[cfg(feature = "tui")]
+    {
+        if let Some(resume_arg) = cli.resume.as_ref() {
+            let which = if resume_arg.is_empty() {
+                None
+            } else {
+                Some(resume_arg.clone())
+            };
+            return Box::pin(run_interactive_tui(Some(SessionBoot::Resume(which)))).await;
+        }
+        if let Some(title) = cli.c.clone() {
+            return Box::pin(run_interactive_tui(Some(SessionBoot::ContinueOrCreate(
+                title,
+            ))))
+            .await;
+        }
+        if cli.command.is_none() {
+            return Box::pin(run_interactive_tui(None)).await;
+        }
+    }
+
+    let command = cli
+        .command
+        .ok_or_else(|| anyhow::anyhow!("no command provided; try `hrafn --help`"))?;
+
     // Completions must remain stdout-only and should not load config or initialize logging.
     // This avoids warnings/log lines corrupting sourced completion scripts.
-    if let Commands::Completions { shell } = &cli.command {
+    if let Commands::Completions { shell } = &command {
         let mut stdout = std::io::stdout().lock();
         write_shell_completion(*shell, &mut stdout)?;
         return Ok(());
     }
 
     // Short-circuit deprecated stdio-rpc before config/secret initialization
-    if matches!(cli.command, Commands::StdioRpc { .. }) {
+    if matches!(command, Commands::StdioRpc { .. }) {
         channels::stdio_rpc::print_deprecation_notice();
         return Ok(());
     }
@@ -956,7 +1042,7 @@ async fn main() -> Result<()> {
         model,
         memory,
         quick,
-    } = &cli.command
+    } = &command
     {
         let force = *force;
         let reinit = *reinit;
@@ -1087,7 +1173,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    match cli.command {
+    match command {
         Commands::Onboard { .. } | Commands::Completions { .. } | Commands::StdioRpc { .. } => {
             unreachable!()
         }
@@ -2801,7 +2887,7 @@ mod tests {
         ])
         .expect("quick onboard invocation should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Onboard {
                 force,
                 channels_only,
@@ -2825,7 +2911,7 @@ mod tests {
         for shell in ["bash", "fish", "zsh", "powershell", "elvish"] {
             let cli = Cli::try_parse_from(["hrafn", "completions", shell])
                 .expect("completions invocation should parse");
-            match cli.command {
+            match cli.command.expect("command should be present") {
                 Commands::Completions { .. } => {}
                 other => panic!("expected completions command, got {other:?}"),
             }
@@ -2849,7 +2935,7 @@ mod tests {
         let cli = Cli::try_parse_from(["hrafn", "onboard", "--force"])
             .expect("onboard --force should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Onboard { force, .. } => assert!(force),
             other => panic!("expected onboard command, got {other:?}"),
         }
@@ -2866,7 +2952,7 @@ mod tests {
         let cli = Cli::try_parse_from(["hrafn", "onboard", "--quick"])
             .expect("onboard --quick should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Onboard { quick, .. } => assert!(quick),
             other => panic!("expected onboard command, got {other:?}"),
         }
@@ -2887,7 +2973,7 @@ mod tests {
     fn onboard_cli_bare_parses() {
         let cli = Cli::try_parse_from(["hrafn", "onboard"]).expect("bare onboard should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Onboard { .. } => {}
             other => panic!("expected onboard command, got {other:?}"),
         }
@@ -2897,7 +2983,7 @@ mod tests {
     fn cli_parses_estop_default_engage() {
         let cli = Cli::try_parse_from(["hrafn", "estop"]).expect("estop command should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Estop {
                 estop_command,
                 level,
@@ -2918,7 +3004,7 @@ mod tests {
         let cli = Cli::try_parse_from(["hrafn", "estop", "resume", "--domain", "*.chase.com"])
             .expect("estop resume command should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Estop {
                 estop_command: Some(EstopSubcommands::Resume { domains, .. }),
                 ..
@@ -2932,7 +3018,7 @@ mod tests {
         let cli = Cli::try_parse_from(["hrafn", "agent", "--temperature", "0.5"])
             .expect("agent command with temperature should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Agent { temperature, .. } => {
                 assert_eq!(temperature, Some(0.5));
             }
@@ -2945,7 +3031,7 @@ mod tests {
         let cli = Cli::try_parse_from(["hrafn", "agent", "--message", "hello"])
             .expect("agent command without temperature should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Agent { temperature, .. } => {
                 assert_eq!(temperature, None);
             }
@@ -2958,7 +3044,7 @@ mod tests {
         let cli = Cli::try_parse_from(["hrafn", "agent", "--session-state-file", "session.json"])
             .expect("agent command with session state file should parse");
 
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::Agent {
                 session_state_file, ..
             } => {
@@ -2998,7 +3084,7 @@ mod tests {
     fn stdio_rpc_command_parses() {
         let cli =
             Cli::try_parse_from(["hrafn", "stdio-rpc"]).expect("stdio-rpc command should parse");
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::StdioRpc { .. } => {}
             other => panic!("expected StdioRpc command, got {other:?}"),
         }
@@ -3007,7 +3093,7 @@ mod tests {
     #[test]
     fn acp_alias_parses_to_stdio_rpc() {
         let cli = Cli::try_parse_from(["hrafn", "acp"]).expect("acp alias should parse");
-        match cli.command {
+        match cli.command.expect("command should be present") {
             Commands::StdioRpc { .. } => {}
             other => panic!("expected StdioRpc command via acp alias, got {other:?}"),
         }
