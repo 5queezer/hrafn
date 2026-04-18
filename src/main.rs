@@ -110,10 +110,37 @@ fn to_provider_history(msgs: &[hrafn::tui::ChatMessage]) -> Vec<hrafn::providers
         .collect()
 }
 
+#[cfg(feature = "tui")]
+enum TuiOutcome {
+    Exit,
+    Relaunch(hrafn::session::SessionId),
+}
+
 /// Launch the interactive TUI when `hrafn` is invoked without arguments.
+///
+/// Wraps [`run_one_tui_session`] in a loop so the in-TUI session picker
+/// (Ctrl+R / `/sessions`) can request an in-process relaunch with a new
+/// session without re-exec'ing the binary.
+#[cfg(feature = "tui")]
+async fn run_interactive_tui(boot: Option<SessionBoot>) -> Result<()> {
+    let mut next_boot = boot;
+    loop {
+        let outcome = Box::pin(run_one_tui_session(next_boot.take())).await?;
+        match outcome {
+            TuiOutcome::Exit => return Ok(()),
+            TuiOutcome::Relaunch(id) => {
+                next_boot = Some(SessionBoot::Resume(Some(id.as_str().to_string())));
+            }
+        }
+    }
+}
+
+/// Run a single TUI session to completion; returns [`TuiOutcome::Relaunch`]
+/// when the user picked another session from the picker, otherwise
+/// [`TuiOutcome::Exit`].
 #[cfg(feature = "tui")]
 #[allow(clippy::too_many_lines)]
-async fn run_interactive_tui(boot: Option<SessionBoot>) -> Result<()> {
+async fn run_one_tui_session(boot: Option<SessionBoot>) -> Result<TuiOutcome> {
     use hrafn::agent::TurnEvent;
     use hrafn::session::{SessionId, SessionStore};
     use hrafn::tui::{ChatMessage, SessionHandle, spawn_tui_resumed};
@@ -121,7 +148,8 @@ async fn run_interactive_tui(boot: Option<SessionBoot>) -> Result<()> {
     use tokio::sync::mpsc;
 
     if !std::io::stdout().is_terminal() {
-        return print_no_command_help();
+        print_no_command_help()?;
+        return Ok(TuiOutcome::Exit);
     }
 
     // Load config (same path as Commands::Agent). Use the library-side
@@ -228,11 +256,16 @@ async fn run_interactive_tui(boot: Option<SessionBoot>) -> Result<()> {
 
     drop(turn_event_tx);
 
-    tui_handle
+    let relaunch_id = tui_handle
         .await
         .map_err(|e| anyhow::anyhow!("TUI task panicked: {e}"))?;
 
-    agent_result
+    if let Some(id) = relaunch_id {
+        return Ok(TuiOutcome::Relaunch(id));
+    }
+
+    agent_result?;
+    Ok(TuiOutcome::Exit)
 }
 
 mod agent;

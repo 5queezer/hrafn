@@ -3,6 +3,7 @@ mod chat;
 mod command;
 mod events;
 mod input;
+mod picker;
 mod sidebar;
 mod statusbar;
 pub mod theme;
@@ -108,6 +109,13 @@ pub struct App {
     pub(crate) palette_items: Vec<PaletteItem>,
     pub(crate) palette_selected: usize,
 
+    // Session picker
+    pub(crate) picker_open: bool,
+    pub(crate) picker_query: String,
+    pub(crate) picker_items: Vec<crate::session::SessionMeta>,
+    pub(crate) picker_selected: usize,
+    pub(crate) relaunch_id: Option<crate::session::SessionId>,
+
     // Spinner (agent thinking indicator)
     pub(crate) spinner: Option<SpinnerState>,
 
@@ -156,6 +164,11 @@ impl App {
                 },
             ],
             palette_selected: 0,
+            picker_open: false,
+            picker_query: String::new(),
+            picker_items: Vec::new(),
+            picker_selected: 0,
+            relaunch_id: None,
             spinner: None,
             session: None,
             persist_retry_count: 0,
@@ -295,6 +308,18 @@ impl App {
                 self.palette_selected,
             );
         }
+
+        // Session picker overlay
+        if self.picker_open {
+            let filtered = picker::filter_sessions(&self.picker_query, &self.picker_items);
+            picker::render_session_picker(
+                frame,
+                frame.area(),
+                &self.picker_query,
+                &filtered,
+                self.picker_selected,
+            );
+        }
     }
 
     fn layout_constraints(&self) -> Vec<Constraint> {
@@ -329,16 +354,20 @@ impl App {
         } else if text == "/clear" {
             self.messages.clear();
             self.scroll_offset = 0;
+        } else if text == "/sessions" {
+            self.open_session_picker();
         } else if text == "/help" {
             self.push_system("Commands:".into());
             self.push_system("  /quit   - Exit the TUI".into());
             self.push_system("  /clear  - Clear output".into());
             self.push_system("  /title <text> - Set explicit session title".into());
+            self.push_system("  /sessions - Open session picker".into());
             self.push_system("  /help   - Show this help".into());
             self.push_system("  ESC     - Cancel in-progress request".into());
             self.push_system("  Shift+Enter - Insert newline".into());
             self.push_system("  Ctrl+B  - Toggle sidebar".into());
             self.push_system("  Ctrl+P  - Toggle command palette".into());
+            self.push_system("  Ctrl+R  - Open session picker".into());
         } else if let Some(rest) = text.strip_prefix("/title ") {
             let title = rest.trim();
             if title.is_empty() {
@@ -409,6 +438,24 @@ impl App {
         }
     }
 
+    pub(crate) fn open_session_picker(&mut self) {
+        let Some(handle) = self.session.as_ref() else {
+            self.push_system("[no session active]".into());
+            return;
+        };
+        match handle.store().list(100) {
+            Ok(items) => {
+                self.picker_items = items;
+                self.picker_open = true;
+                self.picker_query.clear();
+                self.picker_selected = 0;
+            }
+            Err(e) => {
+                self.push_system(format!("[session picker: {e}]"));
+            }
+        }
+    }
+
     fn push_assistant(&mut self, text: String) {
         let persist_text = text.clone();
         self.messages.push(ChatMessage::Assistant { text });
@@ -442,12 +489,13 @@ pub fn spawn_tui_resumed(
     rx: mpsc::Receiver<crate::agent::TurnEvent>,
     session: SessionHandle,
     messages: Vec<ChatMessage>,
-) -> JoinHandle<()> {
-    tokio::task::spawn_blocking(move || {
+) -> JoinHandle<Option<crate::session::SessionId>> {
+    tokio::task::spawn_blocking(move || -> Option<crate::session::SessionId> {
         let mut app = App::with_resumed(session, messages);
         if let Err(e) = run_tui_with_app(tx, rx, &mut app) {
             eprintln!("TUI error: {e}");
         }
+        app.relaunch_id.take()
     })
 }
 
@@ -502,6 +550,47 @@ fn run_tui_with_app(
 
 /// Returns `true` if the app should quit immediately.
 fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> bool {
+    // Session picker intercepts keys when open
+    if app.picker_open {
+        let filtered_len = picker::filter_sessions(&app.picker_query, &app.picker_items).len();
+        match key.code {
+            KeyCode::Esc => {
+                app.picker_open = false;
+                app.picker_query.clear();
+                app.picker_selected = 0;
+            }
+            KeyCode::Char(c) => {
+                app.picker_query.push(c);
+                app.picker_selected = 0;
+            }
+            KeyCode::Backspace => {
+                app.picker_query.pop();
+                app.picker_selected = 0;
+            }
+            KeyCode::Up => {
+                app.picker_selected = app.picker_selected.saturating_sub(1);
+            }
+            KeyCode::Down => {
+                if filtered_len > 0 {
+                    app.picker_selected =
+                        (app.picker_selected + 1).min(filtered_len.saturating_sub(1));
+                }
+            }
+            KeyCode::Enter => {
+                let filtered = picker::filter_sessions(&app.picker_query, &app.picker_items);
+                if let Some(selected) = filtered.get(app.picker_selected) {
+                    app.relaunch_id = Some(selected.id.clone());
+                    app.should_quit = true;
+                }
+                app.picker_open = false;
+                app.picker_query.clear();
+                app.picker_selected = 0;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     // Command palette intercepts keys when open
     if app.palette_open {
         match key.code {
@@ -564,6 +653,11 @@ fn handle_key_event(app: &mut App, tx: &mpsc::Sender<String>, key: KeyEvent) -> 
         KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.palette_open = !app.palette_open;
             app.palette_query.clear();
+            false
+        }
+        // Ctrl+R: open session picker
+        KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.open_session_picker();
             false
         }
         KeyCode::Enter if !key.modifiers.contains(KeyModifiers::SHIFT) => {
