@@ -38,6 +38,9 @@ pub async fn list(as_json: bool) -> Result<()> {
 #[allow(clippy::unused_async)]
 pub async fn delete(id_str: &str, yes: bool) -> Result<()> {
     let path = default_db_path()?;
+    if !path.exists() {
+        anyhow::bail!("session not found: {id_str}");
+    }
     let store = SessionStore::open(&path)?;
     let id = crate::session::SessionId::parse(id_str)?;
     let _loaded = store
