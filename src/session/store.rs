@@ -290,6 +290,64 @@ impl SessionStore {
     }
 }
 
+/// PID-based single-writer lock for a session.
+///
+/// Written as `<db_dir>/<session_id>.lock` containing the owning process's
+/// PID. Acquisition fails if the lockfile exists and the recorded PID is
+/// still alive; a stale lock (dead PID) is reclaimed. The lockfile is
+/// removed on drop (best-effort).
+#[derive(Debug)]
+pub struct SessionLock {
+    path: std::path::PathBuf,
+}
+
+impl SessionLock {
+    pub fn acquire(db_path: &Path, id: &SessionId) -> Result<Self> {
+        let lock_path = Self::lockfile_path(db_path, id);
+        if lock_path.exists() {
+            let content = std::fs::read_to_string(&lock_path).unwrap_or_default();
+            if let Ok(pid) = content.trim().parse::<u32>() {
+                if is_pid_alive(pid) {
+                    bail!("session {} is locked (pid {})", id, pid);
+                }
+            }
+            let _ = std::fs::remove_file(&lock_path);
+        }
+        std::fs::write(&lock_path, std::process::id().to_string())
+            .with_context(|| format!("write {}", lock_path.display()))?;
+        Ok(Self { path: lock_path })
+    }
+
+    fn lockfile_path(db_path: &Path, id: &SessionId) -> std::path::PathBuf {
+        let dir = db_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        dir.join(format!("{}.lock", id.as_str()))
+    }
+}
+
+impl Drop for SessionLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(unix)]
+fn is_pid_alive(pid: u32) -> bool {
+    // SAFETY: `kill` with sig=0 only checks process existence; it does not
+    // read or mutate any memory, and the PID value is validated by the
+    // kernel. No invariants are upheld by this call.
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    rc == 0
+}
+
+#[cfg(not(unix))]
+fn is_pid_alive(_pid: u32) -> bool {
+    // Conservative: assume alive on non-unix. Safer than racing.
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -474,6 +532,35 @@ mod tests {
             .unwrap();
         store.delete(&m.id).unwrap();
         assert!(store.load(&m.id).is_err());
+    }
+
+    #[test]
+    fn lockfile_acquire_and_release() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("s.db");
+        let id = SessionId::generate();
+        let lock = SessionLock::acquire(&db, &id).unwrap();
+        let err = SessionLock::acquire(&db, &id).unwrap_err();
+        assert!(err.to_string().contains("locked"), "got {err}");
+        drop(lock);
+        let _lock2 = SessionLock::acquire(&db, &id).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_lockfile_is_reclaimed() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("s.db");
+        let id = SessionId::generate();
+        let lock_path = db.parent().unwrap().join(format!("{}.lock", id.as_str()));
+        // Seed with this test process's PID — guaranteed alive. Acquire fails.
+        let live_pid = std::process::id();
+        std::fs::write(&lock_path, live_pid.to_string()).unwrap();
+        let err = SessionLock::acquire(&db, &id).unwrap_err();
+        assert!(err.to_string().contains("locked"), "got {err}");
+        // Replace with a (hopefully) dead PID. 2^30 is well outside typical PID max.
+        std::fs::write(&lock_path, (1u32 << 30).to_string()).unwrap();
+        let _lock = SessionLock::acquire(&db, &id).unwrap();
     }
 
     #[test]

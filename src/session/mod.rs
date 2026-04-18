@@ -10,5 +10,5 @@ pub mod types;
 
 pub use id::SessionId;
 pub use message::{ChatMessage, ToolStatus};
-pub use store::SessionStore;
+pub use store::{SessionLock, SessionStore};
 pub use types::{MessageCounts, Session, SessionMeta, StoredMessage};

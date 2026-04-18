@@ -131,6 +131,10 @@ pub struct App {
     // Control
     pub(crate) should_quit: bool,
     pub(crate) tick: usize,
+
+    // Duration tracking
+    pub(crate) session_started: Instant,
+    pub(crate) last_duration_flush: Instant,
 }
 
 impl App {
@@ -177,6 +181,8 @@ impl App {
             context_window: None,
             should_quit: false,
             tick: 0,
+            session_started: Instant::now(),
+            last_duration_flush: Instant::now(),
         }
     }
 
@@ -540,9 +546,26 @@ fn run_tui_with_app(
 
         app.tick = app.tick.wrapping_add(1);
 
+        // Periodic duration flush (every ~10s of wall time). Best-effort:
+        // database errors are ignored — a transient failure during a live
+        // session shouldn't surface as UI noise.
+        if app.last_duration_flush.elapsed() >= std::time::Duration::from_secs(10) {
+            if let Some(h) = app.session.as_ref() {
+                let elapsed = app.last_duration_flush.elapsed();
+                let _ = h.add_duration(elapsed);
+            }
+            app.last_duration_flush = Instant::now();
+        }
+
         if app.should_quit {
             break;
         }
+    }
+
+    // Final flush: account for time since the last periodic flush.
+    if let Some(h) = app.session.as_ref() {
+        let elapsed = app.last_duration_flush.elapsed();
+        let _ = h.add_duration(elapsed);
     }
 
     Ok(())

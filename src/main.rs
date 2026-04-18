@@ -116,6 +116,66 @@ enum TuiOutcome {
     Relaunch(hrafn::session::SessionId),
 }
 
+/// Format a [`std::time::Duration`] as a compact `h m s` / `m s` / `s` string.
+fn format_duration(d: std::time::Duration) -> String {
+    let secs = d.as_secs();
+    let h = secs / 3600;
+    let m = (secs % 3600) / 60;
+    let s = secs % 60;
+    if h > 0 {
+        format!("{h}h {m}m {s}s")
+    } else if m > 0 {
+        format!("{m}m {s}s")
+    } else {
+        format!("{s}s")
+    }
+}
+
+/// Print the post-session summary block (resume hint + stats) to stderr.
+#[cfg(feature = "tui")]
+fn print_exit_banner(
+    handle: &hrafn::tui::SessionHandle,
+    store: &hrafn::session::SessionStore,
+) -> Result<()> {
+    let meta = store.load(handle.id())?.meta;
+    let id = meta.id.as_str();
+    let title = meta.title.as_deref().unwrap_or("Untitled");
+    let dur = format_duration(meta.duration);
+    let counts = meta.counts;
+
+    eprintln!();
+    eprintln!("Resume this session with:");
+    eprintln!("  hrafn --resume {id}");
+    if meta.title_explicit {
+        if let Some(t) = &meta.title {
+            eprintln!("  hrafn -c \"{t}\"");
+        }
+    }
+    eprintln!();
+    eprintln!("Session:    {id}");
+    eprintln!("Title:      {title}");
+    eprintln!("Duration:   {dur}");
+    eprintln!(
+        "Messages:   {} ({} user, {} tool calls)",
+        counts.total, counts.user, counts.tool_call
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod exit_banner_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn format_duration_variants() {
+        assert_eq!(format_duration(Duration::from_secs(0)), "0s");
+        assert_eq!(format_duration(Duration::from_secs(59)), "59s");
+        assert_eq!(format_duration(Duration::from_secs(60)), "1m 0s");
+        assert_eq!(format_duration(Duration::from_secs(3661)), "1h 1m 1s");
+    }
+}
+
 /// Launch the interactive TUI when `hrafn` is invoked without arguments.
 ///
 /// Wraps [`run_one_tui_session`] in a loop so the in-TUI session picker
@@ -209,6 +269,10 @@ async fn run_one_tui_session(boot: Option<SessionBoot>) -> Result<TuiOutcome> {
         }
     };
 
+    // Acquire single-writer session lock (dropped at end of scope).
+    let _lock = hrafn::session::SessionLock::acquire(&db_path, handle.id())
+        .context("acquire session lock")?;
+
     // Build provider seed history if resuming.
     let seed: Vec<hrafn::providers::ChatMessage> = resumed_messages
         .as_ref()
@@ -232,6 +296,9 @@ async fn run_one_tui_session(boot: Option<SessionBoot>) -> Result<TuiOutcome> {
         None => banner_msgs,
     };
 
+    // Clone the handle so we can still reference the session after the TUI
+    // task takes ownership (needed for the exit banner below).
+    let banner_handle = handle.clone();
     let tui_handle = spawn_tui_resumed(user_tx, turn_event_rx, handle, tui_initial_messages);
 
     // Run the agent in TUI mode (blocks until user_rx closes).
@@ -263,6 +330,10 @@ async fn run_one_tui_session(boot: Option<SessionBoot>) -> Result<TuiOutcome> {
     if let Some(id) = relaunch_id {
         return Ok(TuiOutcome::Relaunch(id));
     }
+
+    // Clean exit: print resume hint block. Best-effort; ignore DB errors
+    // since the TUI is already shutting down.
+    let _ = print_exit_banner(&banner_handle, &store);
 
     agent_result?;
     Ok(TuiOutcome::Exit)
