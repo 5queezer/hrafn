@@ -255,11 +255,8 @@ impl App {
         // Status bar (bottom line)
         let status_idx = main_chunks.len() - 1;
         let (branch, dirty) = self.git_status.snapshot();
-        let pct = self.context_window.filter(|w| *w > 0).map(|w| {
-            let used = self.agent_info.input_tokens + self.agent_info.output_tokens;
-            let p = used.saturating_mul(100).saturating_div(u64::from(w));
-            u8::try_from(p).unwrap_or(99)
-        });
+        let used = self.agent_info.input_tokens + self.agent_info.output_tokens;
+        let pct = self.context_window.and_then(|w| context_percent(used, w));
         let info = statusbar::StatusInfo {
             model: if self.agent_info.model.is_empty() {
                 None
@@ -422,27 +419,18 @@ impl App {
     }
 }
 
-/// Spawn the TUI event loop on a tokio blocking task.
+/// Compute the context window fill percentage, clamped to 0-100.
 ///
-/// - `tx`: channel for sending user input (and cancel signals) to the agent.
-/// - `rx`: channel for receiving `TurnEvent`s from the agent.
-/// - `session`: optional `SessionHandle` to persist messages to.
-///
-/// Returns a `JoinHandle` that resolves when the TUI exits.
-pub fn spawn_tui(
-    tx: mpsc::Sender<String>,
-    rx: mpsc::Receiver<crate::agent::TurnEvent>,
-    session: Option<SessionHandle>,
-) -> JoinHandle<()> {
-    tokio::task::spawn_blocking(move || {
-        let mut app = match session {
-            Some(h) => App::with_session(h),
-            None => App::new(),
-        };
-        if let Err(e) = run_tui_with_app(tx, rx, &mut app) {
-            eprintln!("TUI error: {e}");
-        }
-    })
+/// Returns `None` when the window size is 0 (unknown).
+fn context_percent(used: u64, window: u32) -> Option<u8> {
+    if window == 0 {
+        return None;
+    }
+    let p = used
+        .saturating_mul(100)
+        .saturating_div(u64::from(window))
+        .min(100);
+    Some(u8::try_from(p).unwrap_or(100))
 }
 
 /// Spawn the TUI event loop with a pre-populated message history.
@@ -627,6 +615,20 @@ pub(crate) fn derive_title_from(first_user_msg: &str) -> String {
     let mut out: String = first_line.chars().take(60).collect();
     out.push('…');
     out
+}
+
+#[cfg(test)]
+mod context_percent_tests {
+    use super::context_percent;
+
+    #[test]
+    fn context_percent_clamps_to_100() {
+        assert_eq!(context_percent(0, 1000), Some(0));
+        assert_eq!(context_percent(500, 1000), Some(50));
+        assert_eq!(context_percent(1500, 1000), Some(100));
+        assert_eq!(context_percent(1000, 1000), Some(100));
+        assert_eq!(context_percent(100, 0), None);
+    }
 }
 
 #[cfg(test)]
