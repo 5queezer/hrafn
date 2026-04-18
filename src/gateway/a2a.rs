@@ -44,7 +44,7 @@ const MAX_TASKS: usize = 10_000;
 
 /// In-memory store for A2A task state.
 pub struct TaskStore {
-    tasks: RwLock<HashMap<String, Task>>,
+    pub(crate) tasks: RwLock<HashMap<String, Task>>,
     /// Maps `context_id` → list of task IDs sharing that context.
     context_index: RwLock<HashMap<String, Vec<String>>>,
     /// Tracks when tasks entered a terminal state for TTL-based eviction.
@@ -298,7 +298,7 @@ pub enum A2aTaskState {
 
 impl A2aTaskState {
     /// Whether this state is terminal (task will not transition further).
-    fn is_terminal(&self) -> bool {
+    pub(crate) fn is_terminal(&self) -> bool {
         matches!(
             self,
             A2aTaskState::Completed
@@ -360,6 +360,9 @@ pub mod error_reason {
     pub const TASK_ALREADY_TERMINAL: &str = "TASK_ALREADY_TERMINAL";
     pub const TASK_STORE_FULL: &str = "TASK_STORE_FULL";
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
+    /// Used when a bounded resource (e.g. push notification configs per task)
+    /// is exhausted.  Mirrors `google.rpc.Code.RESOURCE_EXHAUSTED`.
+    pub const RESOURCE_EXHAUSTED: &str = "RESOURCE_EXHAUSTED";
 }
 
 // ── v1.0 Streaming types ────────────────────────────────────────
@@ -466,7 +469,7 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
         }],
         "capabilities": {
             "streaming": true,
-            "pushNotifications": false
+            "pushNotifications": true
         },
         "defaultInputModes": ["text/plain"],
         "defaultOutputModes": ["text/plain"],
@@ -553,6 +556,43 @@ pub async fn handle_a2a_rpc(
         "tasks/getByContextId" => handle_tasks_get_by_context(task_store, body)
             .await
             .into_response(),
+        // Push notification config methods — require the push store to be
+        // wired on state.  Missing store falls through to METHOD_NOT_FOUND.
+        m if m.starts_with("tasks/pushNotificationConfig/") && state.a2a_push_store.is_some() => {
+            let push_store = state.a2a_push_store.as_ref().unwrap();
+            match m {
+                "tasks/pushNotificationConfig/create" => {
+                    super::a2a_push::handle_create_rpc(push_store, task_store, body)
+                        .await
+                        .into_response()
+                }
+                "tasks/pushNotificationConfig/get" => {
+                    super::a2a_push::handle_get_rpc(push_store, body)
+                        .await
+                        .into_response()
+                }
+                "tasks/pushNotificationConfig/list" => {
+                    super::a2a_push::handle_list_rpc(push_store, body)
+                        .await
+                        .into_response()
+                }
+                "tasks/pushNotificationConfig/delete" => {
+                    super::a2a_push::handle_delete_rpc(push_store, body)
+                        .await
+                        .into_response()
+                }
+                _ => (
+                    StatusCode::OK,
+                    Json(rpc_error(
+                        body.id,
+                        -32601,
+                        &format!("Method not found: {m}"),
+                        Some(error_reason::METHOD_NOT_FOUND),
+                    )),
+                )
+                    .into_response(),
+            }
+        }
         _ => (
             StatusCode::OK,
             Json(rpc_error(
@@ -568,7 +608,7 @@ pub async fn handle_a2a_rpc(
 
 // ── Auth helper ──────────────────────────────────────────────────
 
-fn require_a2a_auth(
+pub(crate) fn require_a2a_auth(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
@@ -1339,12 +1379,26 @@ pub async fn handle_message_send_rest(
     unwrap_rpc_to_rest(status, body).into_response()
 }
 
-/// `GET /tasks/{id}` — v1.0 REST binding for GetTask.
+/// `GET /tasks/{id}` — v1.0 REST binding for `GetTask`.
+///
+/// Also dispatches to the SubscribeToTask handler when the path ends with
+/// the `:subscribe` suffix (axum has no `{param}:suffix` routing, so the
+/// suffix lands inside the captured id).
 pub async fn handle_tasks_get_rest(
     State(state): State<AppState>,
     headers: HeaderMap,
     axum::extract::Path(task_id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    if task_id.ends_with(":subscribe") {
+        return super::a2a_push::handle_subscribe_rest(
+            State(state),
+            headers,
+            axum::extract::Path(task_id),
+        )
+        .await
+        .into_response();
+    }
+
     let (Some(_card), Some(task_store)) = (&state.a2a_agent_card, &state.a2a_task_store) else {
         return (
             StatusCode::NOT_FOUND,
@@ -1582,6 +1636,7 @@ pub async fn handle_message_stream_rest(
     });
     let tid = task_id.clone();
     let ctx = context_id.clone();
+    let push_store = state.a2a_push_store.clone();
 
     let (sse_tx, sse_rx) = tokio::sync::mpsc::channel::<Event>(64);
 
@@ -1591,16 +1646,49 @@ pub async fn handle_message_stream_rest(
         let task_store = Arc::clone(&task_store);
         let prompt_text = prompt_text.clone();
         let message_text = message_text.clone();
+        let push_store = push_store.clone();
 
         async move {
             use crate::agent::TurnEvent;
 
-            // Helper: best-effort send (client may have disconnected)
+            // Helper: best-effort send (client may have disconnected).  Each
+            // emission also fans out to any registered push notification
+            // configs for this task.
             macro_rules! emit {
                 ($event:expr) => {
                     let _ = sse_tx.send($event).await;
                 };
             }
+
+            // Dispatch a status-update event to registered webhook configs.
+            // Closure borrows `push_store` by reference so it stays callable
+            // throughout the streaming loop.
+            let dispatch_status = |ev: &TaskStatusUpdateEvent| {
+                if let Some(store) = push_store.as_ref() {
+                    let payload = serde_json::json!({
+                        "kind": "status-update",
+                        "taskStatusUpdateEvent": ev,
+                    });
+                    super::a2a_push::dispatch(
+                        Arc::clone(store),
+                        ev.task_id.clone(),
+                        Arc::new(payload),
+                    );
+                }
+            };
+            let dispatch_artifact = |ev: &TaskArtifactUpdateEvent| {
+                if let Some(store) = push_store.as_ref() {
+                    let payload = serde_json::json!({
+                        "kind": "artifact-update",
+                        "taskArtifactUpdateEvent": ev,
+                    });
+                    super::a2a_push::dispatch(
+                        Arc::clone(store),
+                        ev.task_id.clone(),
+                        Arc::new(payload),
+                    );
+                }
+            };
 
             // Emit initial status: working
             let working_event = TaskStatusUpdateEvent {
@@ -1619,6 +1707,7 @@ pub async fn handle_message_stream_rest(
                     .event("status_update")
                     .data(serde_json::to_string(&working_event).unwrap_or_default())
             );
+            dispatch_status(&working_event);
 
             // Update task store to working
             {
@@ -1660,6 +1749,7 @@ pub async fn handle_message_stream_rest(
                             .event("status_update")
                             .data(serde_json::to_string(&fail_event).unwrap_or_default())
                     );
+                    dispatch_status(&fail_event);
 
                     // Update task store — always runs even if client disconnected
                     {
@@ -1717,6 +1807,7 @@ pub async fn handle_message_stream_rest(
                                 .event("artifact_update")
                                 .data(serde_json::to_string(&artifact_event).unwrap_or_default())
                         );
+                        dispatch_artifact(&artifact_event);
                     }
                     TurnEvent::Thinking { delta } => {
                         let ev = TaskStatusUpdateEvent {
@@ -1879,6 +1970,7 @@ pub async fn handle_message_stream_rest(
                 is_final: true,
                 metadata: None,
             };
+            dispatch_status(&final_event);
             let _ = sse_tx
                 .send(
                     Event::default()
@@ -2066,7 +2158,7 @@ fn extract_text_from_parts(parts: &[Part]) -> String {
         .join(" ")
 }
 
-fn rpc_error(
+pub(crate) fn rpc_error(
     id: serde_json::Value,
     code: i32,
     message: &str,
@@ -2218,6 +2310,9 @@ mod tests {
             canvas_store: crate::tools::canvas::CanvasStore::new(),
             a2a_agent_card: Some(Arc::new(card)),
             a2a_task_store: Some(Arc::new(TaskStore::new())),
+            a2a_push_store: Some(Arc::new(
+                crate::gateway::a2a_push::PushNotificationStore::new(),
+            )),
             acp_agent_registry: Arc::new(vec![]),
             acp_run_store: Arc::new(crate::gateway::acp::RunStore::new()),
             auth_limiter: Arc::new(crate::gateway::auth_rate_limit::AuthRateLimiter::new()),
@@ -2263,6 +2358,7 @@ mod tests {
         assert_eq!(ifaces[0]["protocol_version"], "1.0");
         assert!(card["capabilities"].is_object());
         assert_eq!(card["capabilities"]["streaming"], true);
+        assert_eq!(card["capabilities"]["pushNotifications"], true);
         // v1.0: security_schemes replaces authentication
         assert!(card["security_schemes"]["bearer"].is_object());
         assert!(card["security_requirements"].is_array());

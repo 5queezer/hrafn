@@ -554,7 +554,7 @@ impl Tool for A2aTool {
 
 // ── SSRF protection helpers (mirrored from web_fetch.rs) ─────────
 
-fn is_private_or_local_host(host: &str) -> bool {
+pub(crate) fn is_private_or_local_host(host: &str) -> bool {
     let bare = host
         .strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
@@ -580,7 +580,7 @@ fn is_private_or_local_host(host: &str) -> bool {
 }
 
 #[cfg(not(test))]
-fn validate_resolved_host_is_public(host: &str) -> anyhow::Result<()> {
+pub(crate) fn validate_resolved_host_is_public(host: &str) -> anyhow::Result<()> {
     use std::net::ToSocketAddrs;
 
     let ips = (host, 0)
@@ -596,7 +596,7 @@ fn validate_resolved_host_is_public(host: &str) -> anyhow::Result<()> {
 /// Literal IP/hostname checks are still exercised via `is_private_or_local_host`
 /// in `validate_url`; only the resolve-and-recheck path is stubbed out.
 #[cfg(test)]
-fn validate_resolved_host_is_public(_host: &str) -> anyhow::Result<()> {
+pub(crate) fn validate_resolved_host_is_public(_host: &str) -> anyhow::Result<()> {
     Ok(())
 }
 

@@ -1710,6 +1710,8 @@ mod tests {
             a2a_agent_card: None,
             #[cfg(feature = "tool-a2a")]
             a2a_task_store: None,
+            #[cfg(feature = "tool-a2a")]
+            a2a_push_store: None,
             acp_agent_registry: std::sync::Arc::new(vec![]),
             acp_run_store: std::sync::Arc::new(crate::gateway::acp::RunStore::new()),
         }
