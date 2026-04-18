@@ -394,8 +394,35 @@ pub struct TaskArtifactUpdateEvent {
 
 // ── Agent card generation ────────────────────────────────────────
 
+/// Scope of an A2A agent card — public (unauthenticated) or extended
+/// (returned from the authenticated `/extendedAgentCard` endpoint, which
+/// additionally advertises skills listed in `A2aConfig.extended_skills`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardScope {
+    /// Public card served at `/.well-known/agent-card.json`.
+    Public,
+    /// Extended card served at `/extendedAgentCard` — requires auth.
+    Extended,
+}
+
+/// Build a single `AgentSkill` JSON object from a capability tag.
+fn skill_from_tag(tag: &str) -> serde_json::Value {
+    json!({
+        "id": tag,
+        "name": tag,
+        "description": format!("{tag} capability"),
+        "tags": [tag],
+        "examples": []
+    })
+}
+
 /// Generate the A2A agent card from configuration.
-pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value {
+///
+/// The public endpoint (`/.well-known/agent-card.json`) passes
+/// [`CardScope::Public`]; the authenticated `/extendedAgentCard` endpoint
+/// passes [`CardScope::Extended`] which appends any
+/// `A2aConfig.extended_skills` to the skill list.
+pub fn generate_agent_card(config: &crate::config::Config, scope: CardScope) -> serde_json::Value {
     let a2a = &config.a2a;
 
     let name = a2a
@@ -418,7 +445,9 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
         .clone()
         .unwrap_or_else(|| format!("http://{}:{}", config.gateway.host, config.gateway.port));
 
-    let skills: Vec<serde_json::Value> = if a2a.capabilities.is_empty() {
+    // Public skills always appear.  Extended skills (if any) are appended
+    // only when the caller is authenticated (scope == Extended).
+    let mut skills: Vec<serde_json::Value> = if a2a.capabilities.is_empty() {
         vec![json!({
             "id": "general",
             "name": "General",
@@ -427,19 +456,11 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
             "examples": ["Help me with a task"]
         })]
     } else {
-        a2a.capabilities
-            .iter()
-            .map(|c| {
-                json!({
-                    "id": c,
-                    "name": c,
-                    "description": format!("{c} capability"),
-                    "tags": [c],
-                    "examples": []
-                })
-            })
-            .collect()
+        a2a.capabilities.iter().map(|c| skill_from_tag(c)).collect()
     };
+    if scope == CardScope::Extended {
+        skills.extend(a2a.extended_skills.iter().map(|c| skill_from_tag(c)));
+    }
 
     let protocol_version = a2a
         .protocol_version
@@ -455,19 +476,39 @@ pub fn generate_agent_card(config: &crate::config::Config) -> serde_json::Value 
     let requires_auth =
         a2a.bearer_token.as_ref().is_some_and(|t| !t.is_empty()) || config.gateway.require_pairing;
 
+    // Build the (single) AgentInterface entry, optionally tagged with the
+    // configured default tenant.
+    let mut interface = json!({
+        "url": format!("{base_url}/"),
+        "protocol_binding": "JSONRPC",
+        "protocol_version": protocol_version
+    });
+    if let Some(ref tenant) = a2a.default_tenant {
+        interface["tenant"] = json!(tenant);
+    }
+
+    // Advertise the extended-card capability when any extended skill is
+    // configured — otherwise omit (treat as false per v1.0).
+    let has_extended = !a2a.extended_skills.is_empty();
+    let capabilities_obj = if has_extended {
+        json!({
+            "streaming": true,
+            "pushNotifications": false,
+            "extendedAgentCard": true
+        })
+    } else {
+        json!({
+            "streaming": true,
+            "pushNotifications": false
+        })
+    };
+
     let mut card = json!({
         "name": name,
         "description": description,
         "version": version,
-        "supported_interfaces": [{
-            "url": format!("{base_url}/"),
-            "protocol_binding": "JSONRPC",
-            "protocol_version": protocol_version
-        }],
-        "capabilities": {
-            "streaming": true,
-            "pushNotifications": false
-        },
+        "supported_interfaces": [interface],
+        "capabilities": capabilities_obj,
         "defaultInputModes": ["text/plain"],
         "defaultOutputModes": ["text/plain"],
         "skills": skills,
@@ -507,6 +548,36 @@ pub async fn handle_agent_card(State(state): State<AppState>) -> impl IntoRespon
         )
             .into_response(),
     }
+}
+
+/// `GET /extendedAgentCard` — authenticated discovery endpoint that
+/// returns the full agent card, including skills gated behind
+/// `A2aConfig.extended_skills`.  The public card at
+/// `/.well-known/agent-card.json` continues to advertise only the
+/// unauthenticated skill set.
+pub async fn handle_extended_agent_card(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    // Feature gate — same check as the public card.
+    if state.a2a_agent_card.is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "A2A protocol not enabled"})),
+        )
+            .into_response();
+    }
+
+    // Authentication required for the extended card.
+    if let Err(resp) = require_a2a_auth(&state, &headers) {
+        return resp.into_response();
+    }
+
+    // Generate the extended card fresh from current config so that
+    // extended_skills changes take effect without a server restart.
+    let config = state.config.lock().clone();
+    let card = generate_agent_card(&config, CardScope::Extended);
+    (StatusCode::OK, Json(card)).into_response()
 }
 
 /// `POST /a2a` — authenticated JSON-RPC 2.0 task endpoint.
@@ -2180,7 +2251,7 @@ mod tests {
             config.a2a.bearer_token = Some(token.to_string());
         }
 
-        let card = generate_agent_card(&config);
+        let card = generate_agent_card(&config, CardScope::Public);
 
         AppState {
             config: Arc::new(Mutex::new(config)),
@@ -2253,7 +2324,7 @@ mod tests {
             ..Default::default()
         };
 
-        let card = generate_agent_card(&config);
+        let card = generate_agent_card(&config, CardScope::Public);
         assert_eq!(card["name"], "ZeroClaw Agent");
         // v1.0: supported_interfaces replaces top-level url
         let ifaces = card["supported_interfaces"].as_array().unwrap();
@@ -2293,7 +2364,7 @@ mod tests {
             ..Default::default()
         };
 
-        let card = generate_agent_card(&config);
+        let card = generate_agent_card(&config, CardScope::Public);
         assert_eq!(card["name"], "my-agent");
         assert_eq!(card["description"], "My custom agent");
         // v1.0: URL is in supported_interfaces
@@ -2467,6 +2538,112 @@ mod tests {
         state.a2a_agent_card = None;
         let resp = handle_agent_card(State(state)).await.into_response();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    // ── Extended agent card tests ────────────────────────────
+
+    fn state_with_extended_skills(bearer: Option<&str>, extended: &[&str]) -> AppState {
+        let state = a2a_test_state(bearer, false, &[]);
+        {
+            let mut cfg = state.config.lock();
+            cfg.a2a.extended_skills = extended.iter().map(|s| (*s).to_string()).collect();
+        }
+        state
+    }
+
+    #[tokio::test]
+    async fn extended_agent_card_requires_auth_when_token_configured() {
+        let state = state_with_extended_skills(Some("secret"), &["admin", "billing"]);
+        let resp = handle_extended_agent_card(State(state), HeaderMap::new())
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn extended_agent_card_returns_extended_skills_when_authenticated() {
+        let state = state_with_extended_skills(Some("secret"), &["admin", "billing"]);
+        let resp = handle_extended_agent_card(State(state), bearer_header("secret"))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = response_json(resp).await;
+        let skill_ids: Vec<&str> = body["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| s["id"].as_str())
+            .collect();
+        assert!(skill_ids.contains(&"admin"));
+        assert!(skill_ids.contains(&"billing"));
+    }
+
+    #[tokio::test]
+    async fn public_card_omits_extended_skills() {
+        let state = state_with_extended_skills(Some("secret"), &["admin", "billing"]);
+        // Re-generate the cached public card from updated config so the
+        // test fixture reflects the post-init extended_skills value.
+        {
+            let config = state.config.lock().clone();
+            let card = generate_agent_card(&config, CardScope::Public);
+            // Mutate via raw pointer isn't safe — rebuild the AppState with
+            // a fresh Arc.  Easier: just call generate_agent_card directly
+            // below.
+            let _ = card;
+        }
+        let config = state.config.lock().clone();
+        let public = generate_agent_card(&config, CardScope::Public);
+        let skill_ids: Vec<&str> = public["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| s["id"].as_str())
+            .collect();
+        assert!(!skill_ids.contains(&"admin"));
+        assert!(!skill_ids.contains(&"billing"));
+    }
+
+    #[test]
+    fn public_card_advertises_extended_capability_when_extended_skills_present() {
+        let config = crate::config::Config {
+            a2a: crate::config::A2aConfig {
+                enabled: true,
+                extended_skills: vec!["admin".into()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let card = generate_agent_card(&config, CardScope::Public);
+        assert_eq!(card["capabilities"]["extendedAgentCard"], true);
+    }
+
+    #[test]
+    fn public_card_omits_extended_capability_when_no_extended_skills() {
+        let config = crate::config::Config {
+            a2a: crate::config::A2aConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let card = generate_agent_card(&config, CardScope::Public);
+        // Field is absent when no extended skills are configured.
+        assert!(card["capabilities"].get("extendedAgentCard").is_none());
+    }
+
+    #[test]
+    fn agent_card_includes_default_tenant_on_interface() {
+        let config = crate::config::Config {
+            a2a: crate::config::A2aConfig {
+                enabled: true,
+                default_tenant: Some("acme".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let card = generate_agent_card(&config, CardScope::Public);
+        let ifaces = card["supported_interfaces"].as_array().unwrap();
+        assert_eq!(ifaces[0]["tenant"], "acme");
     }
 
     #[tokio::test]
