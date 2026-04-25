@@ -97,8 +97,10 @@ nanohtml2text = { version = "0.2", optional = true }
 # Optional Rust-native browser automation backend
 fantoccini = { version = "0.22.1", optional = true, default-features = false, features = ["rustls-tls"] }
 
-# MQTT client for IoT / SOP event fan-in
-rumqttc = { version = "0.25", optional = true }
+# MQTT client for IoT / SOP event fan-in.
+# Use native TLS instead of rumqttc's default rustls stack until rumqttc
+# updates its rustls-webpki 0.102 dependency past RUSTSEC-2026-0098/0099/0104.
+rumqttc = { version = "0.25", optional = true, default-features = false, features = ["use-native-tls"] }
 
 # Tarball extraction for binary updates
 flate2 = { version = "1", optional = true }
