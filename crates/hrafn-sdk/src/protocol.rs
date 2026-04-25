@@ -35,6 +35,18 @@ impl Capability {
     }
 }
 
+impl From<&str> for Capability {
+    fn from(name: &str) -> Self {
+        Self::new(name)
+    }
+}
+
+impl From<String> for Capability {
+    fn from(name: String) -> Self {
+        Self::new(name)
+    }
+}
+
 /// A permission requested by a plugin and granted or denied by policy.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -51,6 +63,18 @@ impl Permission {
     }
 }
 
+impl From<&str> for Permission {
+    fn from(scope: &str) -> Self {
+        Self::new(scope)
+    }
+}
+
+impl From<String> for Permission {
+    fn from(scope: String) -> Self {
+        Self::new(scope)
+    }
+}
+
 /// Minimal manifest returned during plugin handshake.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -58,7 +82,7 @@ pub struct PluginManifest {
     pub name: String,
     pub version: String,
     pub kind: ExtensionKind,
-    pub protocol: String,
+    pub protocol_version: String,
     pub capabilities: Vec<Capability>,
     pub permissions: Vec<Permission>,
 }
@@ -70,21 +94,21 @@ impl PluginManifest {
             name: name.into(),
             version: version.into(),
             kind,
-            protocol: SDK_PROTOCOL_VERSION.into(),
+            protocol_version: SDK_PROTOCOL_VERSION.into(),
             capabilities: Vec::new(),
             permissions: Vec::new(),
         }
     }
 
     #[must_use]
-    pub fn with_capability(mut self, capability: impl Into<String>) -> Self {
-        self.capabilities.push(Capability::new(capability));
+    pub fn with_capability(mut self, capability: impl Into<Capability>) -> Self {
+        self.capabilities.push(capability.into());
         self
     }
 
     #[must_use]
-    pub fn with_permission(mut self, permission: impl Into<String>) -> Self {
-        self.permissions.push(Permission::new(permission));
+    pub fn with_permission(mut self, permission: impl Into<Permission>) -> Self {
+        self.permissions.push(permission.into());
         self
     }
 }

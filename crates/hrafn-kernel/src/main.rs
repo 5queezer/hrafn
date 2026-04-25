@@ -8,14 +8,14 @@ fn main() {
         ExtensionKind::Runtime,
     )
     .with_capability("kernel.registry")
-    .with_capability("kernel.permissions");
-    let mut registry = KernelRegistry::default();
+    .with_permission("kernel.permissions");
+    let mut registry = KernelRegistry::new(["kernel.permissions"]);
     registry
         .register(manifest.clone())
         .expect("kernel manifest should register");
 
     println!(
-        "{} {} {} plugins={}",
+        "name={} version={} sdk_protocol={} plugins={}",
         manifest.name,
         manifest.version,
         SDK_PROTOCOL_VERSION,

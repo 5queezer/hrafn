@@ -4109,6 +4109,7 @@ name = "hrafn-kernel"
 version = "0.1.0"
 dependencies = [
  "hrafn-sdk",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

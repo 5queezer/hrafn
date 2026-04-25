@@ -9,12 +9,12 @@ repository = "https://github.com/5queezer/hrafn"
 rust-version = "1.87"
 
 [dependencies]
-serde = { version = "1.0", default-features = false, features = ["derive", "std"], optional = true }
-serde_json = { version = "1.0", default-features = false, features = ["std"], optional = true }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"], optional = true }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"], optional = true }
 thiserror = { version = "2.0", default-features = false, optional = true }
 
 [features]
 default = ["std", "serde"]
-std = []
+std = ["serde?/std", "serde_json?/std"]
 serde = ["dep:serde", "dep:serde_json"]
 error = ["dep:thiserror"]

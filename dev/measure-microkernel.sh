@@ -27,6 +27,7 @@ echo "+ ${build_cmd[*]}"
 echo
 echo "== dependency feature tree =="
 echo "+ ${tree_cmd[*]}"
+mkdir -p target
 "${tree_cmd[@]}" > "target/hrafn-${profile}-features.txt"
 echo "wrote target/hrafn-${profile}-features.txt"
 

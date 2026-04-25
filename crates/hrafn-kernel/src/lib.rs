@@ -28,6 +28,11 @@ impl KernelRegistry {
     /// Register a plugin manifest after enforcing duplicate-name and permission policy.
     ///
     /// This is intentionally small: it is the seed of the future kernel/plugin boundary.
+    /// Permission matching is exact-string only: every [`hrafn_sdk::Permission::scope`] in
+    /// [`PluginManifest::permissions`] must exactly match one entry in
+    /// `granted_permissions`. There is no hierarchy, prefix/glob matching, or
+    /// normalization at this boundary yet; changing that policy later would be a
+    /// compatibility-affecting protocol change.
     ///
     /// # Errors
     ///
@@ -68,24 +73,10 @@ impl KernelRegistry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum RegistryError {
+    #[error("plugin {0} is already registered")]
     DuplicatePlugin(String),
+    #[error("plugin {plugin} requested ungranted permission {permission}")]
     PermissionDenied { plugin: String, permission: String },
 }
-
-impl std::fmt::Display for RegistryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::DuplicatePlugin(name) => write!(f, "plugin {name} is already registered"),
-            Self::PermissionDenied { plugin, permission } => {
-                write!(
-                    f,
-                    "plugin {plugin} requested ungranted permission {permission}"
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for RegistryError {}
