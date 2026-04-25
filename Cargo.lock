@@ -3993,6 +3993,7 @@ dependencies = [
  "hex",
  "hmac",
  "hostname",
+ "hrafn-sdk",
  "http-body-util",
  "hyper",
  "hyper-util",
@@ -4089,6 +4090,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hrafn-kernel"
+version = "0.1.0"
+dependencies = [
+ "hrafn-sdk",
+]
+
+[[package]]
 name = "hrafn-robot-kit"
 version = "0.1.0"
 dependencies = [
@@ -4108,6 +4116,15 @@ dependencies = [
  "tokio-test",
  "toml 1.1.2+spec-1.1.0",
  "tracing",
+]
+
+[[package]]
+name = "hrafn-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
