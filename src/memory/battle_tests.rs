@@ -515,7 +515,7 @@ mod tests {
     async fn audit_logs_all_operation_types() {
         let tmp = TempDir::new().unwrap();
         let inner = crate::memory::NoneMemory::new();
-        let audited = AuditedMemory::new(inner, tmp.path()).unwrap();
+        let audited = AuditedMemory::new(inner, tmp.path(), false).unwrap();
 
         audited
             .store("k1", "v1", MemoryCategory::Core, None)
@@ -537,7 +537,7 @@ mod tests {
     async fn audit_with_namespaced_operations() {
         let tmp = TempDir::new().unwrap();
         let inner = crate::memory::NoneMemory::new();
-        let audited = AuditedMemory::new(inner, tmp.path()).unwrap();
+        let audited = AuditedMemory::new(inner, tmp.path(), false).unwrap();
 
         audited
             .store_with_metadata(
@@ -562,7 +562,7 @@ mod tests {
     async fn audit_wrapping_sqlite_backend() {
         let tmp = TempDir::new().unwrap();
         let inner = SqliteMemory::new(tmp.path()).unwrap();
-        let audited = AuditedMemory::new(inner, tmp.path()).unwrap();
+        let audited = AuditedMemory::new(inner, tmp.path(), false).unwrap();
 
         // Full round-trip through audited sqlite
         audited
@@ -584,7 +584,7 @@ mod tests {
     async fn audit_concurrent_operations() {
         let tmp = TempDir::new().unwrap();
         let inner = crate::memory::NoneMemory::new();
-        let audited = Arc::new(AuditedMemory::new(inner, tmp.path()).unwrap());
+        let audited = Arc::new(AuditedMemory::new(inner, tmp.path(), false).unwrap());
 
         let mut handles = Vec::new();
         for i in 0..10 {
@@ -774,7 +774,7 @@ mod tests {
     async fn pipeline_with_audited_sqlite() {
         let tmp = TempDir::new().unwrap();
         let sqlite = SqliteMemory::new(tmp.path()).unwrap();
-        let audited = AuditedMemory::new(sqlite, tmp.path()).unwrap();
+        let audited = AuditedMemory::new(sqlite, tmp.path(), false).unwrap();
         let audited = Arc::new(audited);
 
         // Store through audited backend
