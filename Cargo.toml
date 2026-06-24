@@ -273,6 +273,8 @@ full = [
     "tui",
     "observability-prometheus",
     "skill-creation",
+    "skills",
+    "pipeline",
     "channel-telegram",
     "channel-discord",
     "channel-whatsapp",
@@ -316,6 +318,8 @@ desktop = [
 # Stripped-down build for ESP32-S3 (8MB flash, 512KB SRAM).
 # Use: cargo build --bin hrafn-esp32 --features target-esp32 --no-default-features
 target-esp32 = []
+skills = []
+pipeline = []
 channel-nostr = ["dep:nostr-sdk"]
 hardware = ["nusb", "tokio-serial"]
 channel-matrix = ["dep:matrix-sdk"]

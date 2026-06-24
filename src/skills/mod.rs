@@ -13,6 +13,7 @@ use zip::ZipArchive;
 mod audit;
 #[cfg(feature = "skill-creation")]
 pub mod creator;
+pub mod hermes;
 #[cfg(feature = "skill-creation")]
 pub mod improver;
 pub mod integrity;
@@ -1541,6 +1542,37 @@ pub fn handle_command(command: crate::SkillCommands, config: &crate::config::Con
                 }
             }
             println!();
+            Ok(())
+        }
+        crate::SkillCommands::Show { slug } => {
+            // First try the hermes skill index
+            let db_path = workspace_dir.join("memory").join("skills.db");
+            if db_path.exists() {
+                if let Ok(index) = hermes::autonomous::SkillIndex::open(&db_path) {
+                    if let Ok(Some(content)) = index.get_content(&slug) {
+                        println!("{content}");
+                        return Ok(());
+                    }
+                }
+            }
+
+            // Fall back to workspace skills directory
+            let skill_path = skills_dir(workspace_dir).join(&slug).join("SKILL.md");
+            let toml_path = skills_dir(workspace_dir).join(&slug).join("SKILL.toml");
+            let hermes_path = workspace_dir.join("skills").join(format!("{slug}.md"));
+
+            let path = if toml_path.exists() {
+                toml_path
+            } else if skill_path.exists() {
+                skill_path
+            } else if hermes_path.exists() {
+                hermes_path
+            } else {
+                anyhow::bail!("Skill not found: {slug}");
+            };
+
+            let content = std::fs::read_to_string(&path)?;
+            println!("{content}");
             Ok(())
         }
         crate::SkillCommands::Audit { source } => {
