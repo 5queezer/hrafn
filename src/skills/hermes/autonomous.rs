@@ -9,9 +9,9 @@
 //! Security controls include path traversal prevention, disk quota with LRU eviction,
 //! and deduplication via FTS5 similarity scoring.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use regex::Regex;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tracing::warn;
@@ -556,7 +556,9 @@ mod tests {
         // Insert 3 skills
         for i in 0..3 {
             let slug = format!("skill-{i}");
-            let content = format!("+++\ntitle = \"Skill {i}\"\ntags = [\"test\"]\n+++\n# Skill {i}\nContent {i} unique words here for differentiation.");
+            let content = format!(
+                "+++\ntitle = \"Skill {i}\"\ntags = [\"test\"]\n+++\n# Skill {i}\nContent {i} unique words here for differentiation."
+            );
             // Create the file manually
             std::fs::write(skills_dir.join(format!("{slug}.md")), &content).unwrap();
             index

@@ -6,10 +6,10 @@
 //! - S2.2: Cooldown rate limiting (configurable, default 1 hour)
 //! - S2.3: Audit trail integrity (front-matter fields always preserved/injected)
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::{Path, PathBuf};
 
-use super::autonomous::{validate_slug, SkillIndex};
+use super::autonomous::{SkillIndex, validate_slug};
 
 /// Configuration for skill improvement.
 #[derive(Debug, Clone)]

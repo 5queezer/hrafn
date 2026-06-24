@@ -13,9 +13,9 @@ use zip::ZipArchive;
 mod audit;
 #[cfg(feature = "skill-creation")]
 pub mod creator;
+pub mod hermes;
 #[cfg(feature = "skill-creation")]
 pub mod improver;
-pub mod hermes;
 pub mod integrity;
 pub mod testing;
 
